@@ -1,5 +1,5 @@
 """
-PerFedLLM 主启动脚本
+PerFedLLM 主启动脚本 - 修复版
 """
 
 import argparse
@@ -8,7 +8,13 @@ import os
 import sys
 from dataset.data_loader import get_federated_data
 from models.TimeLLM import Model as TimeLLMModel
-from trainer import PerFedLLMTrainer
+from models.TimeMixer import Model as TimeMixerModel
+from models.DLinear import Model as DLinearModel
+from models.TimesNet import Model as TimesNetModel
+from models.Autoformer import Model as AutoformerModel
+from models.Informer import Model as InformerModel
+from models.SimpleTimeLLM import Model as SimpleTimeLLMModel
+from trainer import PerFedLLMTrainerOptimized
 import torch
 import json
 
@@ -24,7 +30,6 @@ def setup_logging(level: str = 'INFO') -> logging.Logger:
     )
     return logging.getLogger('PerFedLLM')
 
-
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description='PerFedLLM: 基于LLM的个性化联邦学习')
@@ -36,10 +41,12 @@ def parse_args():
                        help='数据文件路径')
     parser.add_argument('--data_type', type=str, default='net',
                         help='流量类型 (net/call/sms)')
-    parser.add_argument('--num_clients', type=int, default=10,
+    parser.add_argument('--num_clients', type=int, default=50,
                        help='客户端数量')
     parser.add_argument('--seq_len', type=int, default=96,
                        help='输入序列长度')
+    parser.add_argument('--label_len', type=int, default=48,
+                       help='标签序列长度（用于TimeLLM decoder）')
     parser.add_argument('--pred_len', type=int, default=24,
                        help='预测序列长度')
     parser.add_argument('--test_days', type=int, default=7,
@@ -49,6 +56,7 @@ def parse_args():
 
     # =============== 模型配置 ===============
     parser.add_argument('--model_type', type=str, default='timellm',
+                        choices=['timellm', 'simpletimellm', 'dLinear', 'timeMixer', 'autoformer', 'informer', 'timesNet'],
                        help='模型类型')
     parser.add_argument('--llm_model', type=str, default='Qwen3',
                        choices=['GPT2', 'BERT', 'LLAMA', 'Qwen3', 'DeepSeek'],
@@ -85,7 +93,7 @@ def parse_args():
                        help='LoRA dropout')
 
     # =============== 联邦学习配置 ===============
-    parser.add_argument('--frac', type=float, default=0.6,
+    parser.add_argument('--frac', type=float, default=0.3,
                        help='每轮参与的客户端比例')
     parser.add_argument('--local_ep', type=int, default=10,
                        help='客户端本地训练步数')
@@ -102,33 +110,9 @@ def parse_args():
     parser.add_argument('--personalized_epochs', type=int, default=5,
                        help='个性化微调轮数')
 
-    # =============== 数据增强配置 ===============
-    parser.add_argument('--enable_augmentation', action='store_true',
-                       help='是否启用数据增强')
-    parser.add_argument('--mixup_prob', type=float, default=0.2,
-                       help='Mixup概率')
-    parser.add_argument('--jittering_prob', type=float, default=0.15,
-                       help='抖动概率')
-    parser.add_argument('--scaling_prob', type=float, default=0.1,
-                       help='缩放概率')
-    parser.add_argument('--augmentation_ratio', type=float, default=0.3,
-                       help='数据增强比例')
-    parser.add_argument('--similarity_threshold', type=float, default=0.6,
-                       help='相似性阈值')
-    parser.add_argument('--candidate_pool_size', type=int, default=5,
-                       help='候选池大小')
-    parser.add_argument('--augmentation_lambda_min', type=float, default=0.6,
-                       help='增强lambda最小值')
-    parser.add_argument('--augmentation_lambda_max', type=float, default=0.8,
-                       help='增强lambda最大值')
-    parser.add_argument('--enable_regularization_constraints', action='store_true', default=True,
-                       help='启用正则化约束')
-    parser.add_argument('--max_deviation_ratio', type=float, default=0.3,
-                       help='最大偏离比例')
-    parser.add_argument('--min_correlation_threshold', type=float, default=0.5,
-                       help='最小相关性阈值')
-    parser.add_argument('--constraint_correction_weight', type=float, default=0.3,
-                       help='约束修正权重')
+    # =============== 显存优化配置 ===============
+    parser.add_argument('--client_batch_size', type=int, default=1,
+                       help='个性化阶段客户端批处理大小')
 
     # =============== 其他配置 ===============
     parser.add_argument('--seed', type=int, default=42,
@@ -139,7 +123,7 @@ def parse_args():
                        help='数据集描述')
     parser.add_argument('--save_dir', type=str, default='./experiments',
                        help='结果保存目录')
-    parser.add_argument('--experiment_name', type=str, default='perfedllm_default',
+    parser.add_argument('--experiment_name', type=str, default='perfedllm_optimized',
                        help='实验名称')
     parser.add_argument('--log_level', type=str, default='INFO',
                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
@@ -148,6 +132,49 @@ def parse_args():
                         help='设备 (cpu/cuda/auto)')
 
     return parser.parse_args()
+
+def getModel(args):
+    """获取模型"""
+    args.dec_in = 1
+    args.c_out = 1
+    args.e_layers = 2
+    args.d_layers = 1
+    args.embed = 'timeF'
+    args.freq = 'h'
+    args.activation = 'gelu'
+
+    if args.model_type == 'dLinear':
+        args.moving_avg = 25
+        model_class = DLinearModel
+    elif args.model_type == 'autoformer':
+        args.factor = 3
+        args.moving_avg = 25
+        model_class = AutoformerModel
+    elif args.model_type == 'timesNet':
+        args.top_k = 5
+        args.num_kernels = 6
+        model_class = TimesNetModel
+    elif args.model_type == 'informer':
+        args.factor = 5
+        args.distil = True
+        model_class = InformerModel
+    elif args.model_type == 'timeMixer':
+        args.down_sampling_layers = 3
+        args.down_sampling_window = 2
+        args.down_sampling_method = 'avg'
+        args.use_norm = 1
+        args.channel_independence = 0
+        args.decomp_method = 'moving_avg'
+        args.moving_avg = 25
+        model_class = TimeMixerModel
+    elif args.model_type == 'timellm':
+        model_class = TimeLLMModel
+    elif args.model_type == 'simpletimellm':
+        model_class = SimpleTimeLLMModel
+    else:
+        raise ValueError(f"Unknown model: {args.model_type}")
+
+    return model_class, args
 
 
 def main():
@@ -158,13 +185,14 @@ def main():
     # 设置日志
     logger = setup_logging(args.log_level)
 
-    logger.info("=== PerFedLLM 训练开始 ===")
+    logger.info("=== PerFedLLM 训练开始 (修复版) ===")
     logger.info(f"实验配置:")
     logger.info(f"  LLM模型: {args.llm_model}")
     logger.info(f"  使用LoRA: {args.use_lora}")
     logger.info(f"  客户端数量: {args.num_clients}")
     logger.info(f"  联邦轮数: {args.epochs}")
     logger.info(f"  个性化轮数: {args.personalized_epochs}")
+    logger.info(f"  序列长度: seq_len={args.seq_len}, label_len={args.label_len}, pred_len={args.pred_len}")
     logger.info(f"  设备: {args.device}")
 
     try:
@@ -174,7 +202,7 @@ def main():
 
         # 2. 创建训练器
         logger.info("=== 步骤2: 创建训练器 ===")
-        trainer = PerFedLLMTrainer(args, logger)
+        trainer = PerFedLLMTrainerOptimized(args, logger)
 
         # 3. 设置数据
         logger.info("=== 步骤3: 设置数据 ===")
@@ -182,7 +210,8 @@ def main():
 
         # 4. 设置模型
         logger.info("=== 步骤4: 设置模型 ===")
-        trainer.setup_model(TimeLLMModel, args)
+        model, args = getModel(args)
+        trainer.setup_model(model, args)
 
         # 5. 设置客户端和服务器
         logger.info("=== 步骤5: 设置客户端和服务器 ===")
@@ -193,16 +222,16 @@ def main():
         logger.info("=== 步骤6: 开始训练 ===")
         results = trainer.train()
 
-        # 7. 保存结果（只保存全局模型和测试指标）
+        # 7. 保存结果
         logger.info("=== 步骤7: 保存结果 ===")
         save_dir = os.path.join(args.save_dir, args.experiment_name)
         os.makedirs(save_dir, exist_ok=True)
 
-        # 只保存全局模型（节省存储空间）
+        # 保存全局模型
         torch.save(trainer.global_model.state_dict(),
                   os.path.join(save_dir, 'global_model.pth'))
 
-        # 保存训练结果（重点是个性化测试指标）
+        # 保存训练结果
         def convert_tensors(obj):
             """递归转换tensor为列表"""
             if isinstance(obj, dict):
@@ -211,7 +240,7 @@ def main():
                 return [convert_tensors(item) for item in obj]
             elif isinstance(obj, torch.Tensor):
                 return obj.cpu().numpy().tolist()
-            elif hasattr(obj, 'item'):  # numpy scalar
+            elif hasattr(obj, 'item'):
                 return obj.item()
             else:
                 return obj
@@ -272,6 +301,12 @@ def main():
                 'use_lora': args.use_lora,
                 'num_clients': args.num_clients,
                 'successful_clients': len(valid_results),
+                'client_batch_size': args.client_batch_size,
+                'sequence_config': {
+                    'seq_len': args.seq_len,
+                    'label_len': args.label_len,
+                    'pred_len': args.pred_len
+                },
                 'average_metrics': {k: v['mean'] for k, v in avg_metrics.items()},
                 'std_metrics': {k: v['std'] for k, v in avg_metrics.items()},
                 'federated_final_metrics': results.get('federated_metrics', {}),
@@ -297,13 +332,18 @@ def main():
             logger.warning("没有客户端成功完成个性化微调")
 
         logger.info(f"\n所有结果已保存到: {save_dir}")
-        logger.info("注意: 为节省存储空间，只保存了全局模型，客户端个性化模型仅用于测试后即删除")
+        logger.info("修复内容: 1) 真实时间特征 2) 正确的decoder输入格式 3) 基于训练集的标准化")
 
     except Exception as e:
         logger.error(f"训练过程出现错误: {e}")
         import traceback
         traceback.print_exc()
         return 1
+
+    finally:
+        # 最终清理显存
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     return 0
 

@@ -1,5 +1,5 @@
 """
-联邦学习客户端实现
+联邦学习客户端实现 - 支持真实时间特征
 """
 
 import torch
@@ -9,180 +9,178 @@ import numpy as np
 import logging
 from typing import Dict, List
 from torch.utils.data import DataLoader
+import gc
 
 
 class FederatedClient:
     """联邦学习客户端"""
 
-    def __init__(self, client_id: str, model: nn.Module, data_loader: DataLoader,
+    def __init__(self, client_id: str, shared_model: nn.Module, data_loader: DataLoader,
                  args, logger: logging.Logger, device: torch.device):
         self.client_id = client_id
-        self.model = model
+        self.shared_model = shared_model  # 共享模型引用
         self.data_loader = data_loader
         self.args = args
         self.logger = logger
         self.device = device
-
-        # 优化器配置
-        self.optimizer = self._create_optimizer()
+        self.test_loader = None
         self.criterion = nn.MSELoss()
 
-        # 可训练参数名称（用于梯度聚合）
+        # 获取可训练参数名称
         self.trainable_param_names = self._get_trainable_param_names()
 
-    def _create_optimizer(self) -> optim.Optimizer:
-        """创建优化器，仅优化可训练参数"""
-        trainable_params = []
-
-        # 收集可训练参数
-        for name, param in self.model.named_parameters():
-            if param.requires_grad:
-                trainable_params.append(param)
-
-        # 使用AdamW优化器，适合LLM微调
-        optimizer = optim.AdamW(
-            trainable_params,
-            lr=self.args.lr,
-            weight_decay=self.args.weight_decay,
-            betas=(0.9, 0.999),
-            eps=1e-8
-        )
-
-        return optimizer
+        # 用于保存训练前的参数状态
+        self._saved_state = None
 
     def _get_trainable_param_names(self) -> List[str]:
         """获取可训练参数名称列表"""
         trainable_names = []
-        for name, param in self.model.named_parameters():
+        for name, param in self.shared_model.named_parameters():
             if param.requires_grad:
                 trainable_names.append(name)
         return trainable_names
 
+    def _save_model_state(self):
+        """保存当前模型状态"""
+        self._saved_state = {}
+        for name, param in self.shared_model.named_parameters():
+            if param.requires_grad:
+                self._saved_state[name] = param.data.clone()
+
+    def _restore_model_state(self):
+        """恢复模型状态"""
+        if self._saved_state is not None:
+            for name, param in self.shared_model.named_parameters():
+                if name in self._saved_state:
+                    param.data.copy_(self._saved_state[name])
+            # 清理保存的状态
+            self._saved_state = None
+            torch.cuda.empty_cache()
+
+    def _load_global_params(self, global_params: Dict[str, torch.Tensor]):
+        """加载全局参数到共享模型"""
+        model_state = self.shared_model.state_dict()
+        for name, param in global_params.items():
+            if name in model_state:
+                model_state[name].copy_(param)
+
     def local_train(self, global_params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
-        客户端局部训练
-
-        Args:
-            global_params: 全局模型参数
-
-        Returns:
-            gradients: 计算得到的梯度字典
+        客户端局部训练 - 支持真实时间特征
         """
-        # 1. 加载全局参数
-        self._load_global_params(global_params)
+        # 1. 保存当前模型状态（用于训练后恢复）
+        self._save_model_state()
 
-        # 2. 记录初始参数（用于计算梯度）
-        initial_params = {}
-        for name in self.trainable_param_names:
-            param = dict(self.model.named_parameters())[name]
-            initial_params[name] = param.data.clone()
+        try:
+            # 2. 加载全局参数
+            self._load_global_params(global_params)
 
-        # 3. 局部训练K步
-        self.model.train()
-        total_loss = 0.0
-        num_batches = 0
+            # 3. 记录训练前参数（用于计算梯度）
+            initial_params = {}
+            for name in self.trainable_param_names:
+                param = dict(self.shared_model.named_parameters())[name]
+                initial_params[name] = param.data.clone()
 
-        # 限制训练步数
-        max_steps = min(self.args.local_ep, len(self.data_loader))
+            # 4. 创建优化器
+            trainable_params = [p for p in self.shared_model.parameters() if p.requires_grad]
+            optimizer = optim.AdamW(
+                trainable_params,
+                lr=self.args.lr,
+                weight_decay=self.args.weight_decay,
+                betas=(0.9, 0.999),
+                eps=1e-8
+            )
 
-        for step, batch_data in enumerate(self.data_loader):
-            if step >= max_steps:
-                break
+            # 5. 局部训练
+            self.shared_model.train()
+            total_loss = 0.0
+            num_batches = 0
+            max_steps = min(self.args.local_ep, len(self.data_loader))
 
-            self.optimizer.zero_grad()
+            for step, batch_data in enumerate(self.data_loader):
+                if step >= max_steps:
+                    break
 
-            # 解包数据
-            if len(batch_data) == 4:  # TimeLLM格式
+                optimizer.zero_grad()
+
+                # 解包数据（现在包含真实时间特征）
                 x_enc, y_true, x_mark, y_mark = batch_data
                 x_enc = x_enc.to(self.device)
                 y_true = y_true.to(self.device)
                 x_mark = x_mark.to(self.device)
                 y_mark = y_mark.to(self.device)
 
-                # 前向传播
-                y_pred = self.model(x_enc, x_mark, None, y_mark)
-            else:  # 传统格式
-                x_enc, y_true = batch_data
-                x_enc = x_enc.to(self.device)
-                y_true = y_true.to(self.device)
+                # 为TimeLLM准备decoder输入（如果需要label_len）
+                if hasattr(self.args, 'label_len'):
+                    batch_size = x_enc.size(0)
+                    # 创建decoder输入：[batch, label_len + pred_len, features]
+                    x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len, x_enc.size(-1)).to(self.device)
+                    # 填入label部分（从encoder的最后label_len步）
+                    x_dec[:, :self.args.label_len, :] = x_enc[:, -self.args.label_len:, :]
 
-                # 创建虚拟时间标记
-                batch_size, seq_len = x_enc.shape[:2]
-                x_mark = torch.zeros(batch_size, seq_len, 4).to(self.device)
-                y_mark = torch.zeros(batch_size, self.args.pred_len, 4).to(self.device)
+                    # 准备decoder时间标记
+                    x_mark_dec = torch.cat([x_mark[:, -self.args.label_len:, :], y_mark], dim=1)
 
-                # 前向传播
-                y_pred = self.model(x_enc.unsqueeze(-1), x_mark, None, y_mark)
+                    # 前向传播（标准TimeLLM格式）
+                    y_pred = self.shared_model(x_enc, x_mark, x_dec, x_mark_dec)
+                else:
+                    # 简化版本（如果没有label_len配置）
+                    y_pred = self.shared_model(x_enc, x_mark, None, y_mark)
 
-            # 计算损失
-            loss = self.criterion(y_pred, y_true.unsqueeze(-1) if len(y_true.shape) == 2 else y_true)
+                # 计算损失和反向传播
+                loss = self.criterion(y_pred, y_true)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.shared_model.parameters(), max_norm=1.0)
+                optimizer.step()
 
-            # 反向传播
-            loss.backward()
+                total_loss += loss.item()
+                num_batches += 1
 
-            # 梯度裁剪
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            # 6. 计算梯度（参数变化）
+            gradients = {}
+            current_params = dict(self.shared_model.named_parameters())
+            for name in self.trainable_param_names:
+                if name in current_params and name in initial_params:
+                    param_diff = initial_params[name] - current_params[name].data
+                    gradients[name] = param_diff / self.args.lr
 
-            # 参数更新
-            self.optimizer.step()
+            avg_loss = total_loss / max(num_batches, 1)
+            self.logger.info(f"客户端 {self.client_id} 完成训练，平均损失: {avg_loss:.6f}")
 
-            total_loss += loss.item()
-            num_batches += 1
+            return gradients
 
-        # 4. 计算参数变化作为梯度
-        gradients = {}
-        current_params = dict(self.model.named_parameters())
-
-        for name in self.trainable_param_names:
-            param_diff = initial_params[name] - current_params[name].data
-            gradients[name] = param_diff / self.args.lr  # 转换为梯度形式
-
-        avg_loss = total_loss / max(num_batches, 1)
-        self.logger.info(f"客户端 {self.client_id} 完成训练，平均损失: {avg_loss:.6f}")
-
-        return gradients
-
-    def _load_global_params(self, global_params: Dict[str, torch.Tensor]):
-        """加载全局参数到本地模型"""
-        model_state = self.model.state_dict()
-
-        for name, param in global_params.items():
-            if name in model_state:
-                model_state[name].copy_(param)
+        finally:
+            # 7. 恢复模型状态（关键：确保不污染全局模型）
+            self._restore_model_state()
+            torch.cuda.empty_cache()
 
     def evaluate(self) -> Dict[str, float]:
         """评估客户端模型性能"""
-        self.model.eval()
+        self.shared_model.eval()
         total_loss = 0.0
         total_mae = 0.0
         num_samples = 0
 
         with torch.no_grad():
             for batch_data in self.data_loader:
-                # 解包数据
-                if len(batch_data) == 4:  # TimeLLM格式
-                    x_enc, y_true, x_mark, y_mark = batch_data
-                    x_enc = x_enc.to(self.device)
-                    y_true = y_true.to(self.device)
-                    x_mark = x_mark.to(self.device)
-                    y_mark = y_mark.to(self.device)
+                x_enc, y_true, x_mark, y_mark = batch_data
+                x_enc = x_enc.to(self.device)
+                y_true = y_true.to(self.device)
+                x_mark = x_mark.to(self.device)
+                y_mark = y_mark.to(self.device)
 
-                    y_pred = self.model(x_enc, x_mark, None, y_mark)
-                else:  # 传统格式
-                    x_enc, y_true = batch_data
-                    x_enc = x_enc.to(self.device)
-                    y_true = y_true.to(self.device)
+                # 使用与训练一致的前向传播逻辑
+                if hasattr(self.args, 'label_len'):
+                    batch_size = x_enc.size(0)
+                    x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len, x_enc.size(-1)).to(self.device)
+                    x_dec[:, :self.args.label_len, :] = x_enc[:, -self.args.label_len:, :]
+                    x_mark_dec = torch.cat([x_mark[:, -self.args.label_len:, :], y_mark], dim=1)
+                    y_pred = self.shared_model(x_enc, x_mark, x_dec, x_mark_dec)
+                else:
+                    y_pred = self.shared_model(x_enc, x_mark, None, y_mark)
 
-                    batch_size, seq_len = x_enc.shape[:2]
-                    x_mark = torch.zeros(batch_size, seq_len, 4).to(self.device)
-                    y_mark = torch.zeros(batch_size, self.args.pred_len, 4).to(self.device)
-
-                    y_pred = self.model(x_enc.unsqueeze(-1), x_mark, None, y_mark)
-
-                # 计算指标
-                y_true_eval = y_true.unsqueeze(-1) if len(y_true.shape) == 2 else y_true
-                mse_loss = nn.MSELoss()(y_pred, y_true_eval)
-                mae_loss = nn.L1Loss()(y_pred, y_true_eval)
+                mse_loss = nn.MSELoss()(y_pred, y_true)
+                mae_loss = nn.L1Loss()(y_pred, y_true)
 
                 total_loss += mse_loss.item() * x_enc.size(0)
                 total_mae += mae_loss.item() * x_enc.size(0)
@@ -195,75 +193,73 @@ class FederatedClient:
         }
 
     def personalized_finetune_and_test(self, epochs: int = 5) -> Dict[str, float]:
-        """个性化微调并测试（不保存模型，只返回测试指标）"""
+        """个性化微调并测试"""
         self.logger.info(f"客户端 {self.client_id} 开始个性化微调...")
 
-        # 检查是否有测试数据
-        if not hasattr(self, 'test_loader') or self.test_loader is None:
-            # 使用训练数据进行测试（实际应用中应该有单独的测试集）
-            self.logger.warning(f"客户端 {self.client_id} 没有测试集，使用训练集进行评估")
-            test_loader = self.data_loader
-        else:
-            test_loader = self.test_loader
+        # 使用测试集或训练集
+        test_loader = self.test_loader if hasattr(self, 'test_loader') and self.test_loader else self.data_loader
 
-        self.model.train()
-        best_loss = float('inf')
+        # 创建优化器
+        trainable_params = [p for p in self.shared_model.parameters() if p.requires_grad]
+        optimizer = optim.AdamW(
+            trainable_params,
+            lr=self.args.lr,
+            weight_decay=self.args.weight_decay,
+            betas=(0.9, 0.999),
+            eps=1e-8
+        )
 
-        # 完整的本地训练（可以使用更多epoch）
-        for epoch in range(epochs):
-            total_loss = 0.0
-            num_batches = 0
+        try:
+            self.shared_model.train()
 
-            # 训练整个数据集，不限制步数
-            for batch_data in self.data_loader:
-                self.optimizer.zero_grad()
+            # 完整的本地训练
+            for epoch in range(epochs):
+                total_loss = 0.0
+                num_batches = 0
 
-                # 解包数据
-                if len(batch_data) == 4:  # TimeLLM格式
+                for batch_data in self.data_loader:
+                    optimizer.zero_grad()
+
+                    # 使用与训练时相同的数据处理逻辑
                     x_enc, y_true, x_mark, y_mark = batch_data
                     x_enc = x_enc.to(self.device)
                     y_true = y_true.to(self.device)
                     x_mark = x_mark.to(self.device)
                     y_mark = y_mark.to(self.device)
 
-                    y_pred = self.model(x_enc, x_mark, None, y_mark)
-                else:  # 传统格式
-                    x_enc, y_true = batch_data
-                    x_enc = x_enc.to(self.device)
-                    y_true = y_true.to(self.device)
+                    # 准备decoder输入（与训练时保持一致）
+                    if hasattr(self.args, 'label_len'):
+                        batch_size = x_enc.size(0)
+                        x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len, x_enc.size(-1)).to(self.device)
+                        x_dec[:, :self.args.label_len, :] = x_enc[:, -self.args.label_len:, :]
+                        x_mark_dec = torch.cat([x_mark[:, -self.args.label_len:, :], y_mark], dim=1)
+                        y_pred = self.shared_model(x_enc, x_mark, x_dec, x_mark_dec)
+                    else:
+                        y_pred = self.shared_model(x_enc, x_mark, None, y_mark)
 
-                    batch_size, seq_len = x_enc.shape[:2]
-                    x_mark = torch.zeros(batch_size, seq_len, 4).to(self.device)
-                    y_mark = torch.zeros(batch_size, self.args.pred_len, 4).to(self.device)
+                    loss = self.criterion(y_pred, y_true)
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.shared_model.parameters(), max_norm=1.0)
+                    optimizer.step()
 
-                    y_pred = self.model(x_enc.unsqueeze(-1), x_mark, None, y_mark)
+                    total_loss += loss.item()
+                    num_batches += 1
 
-                # 计算损失
-                loss = self.criterion(y_pred, y_true.unsqueeze(-1) if len(y_true.shape) == 2 else y_true)
+                if epoch % max(1, epochs // 5) == 0:
+                    avg_loss = total_loss / max(num_batches, 1)
+                    self.logger.info(f"个性化微调 Epoch {epoch+1}/{epochs}, 训练损失: {avg_loss:.6f}")
 
-                # 反向传播
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                self.optimizer.step()
+            # 测试评估
+            self.shared_model.eval()
+            test_metrics = self._evaluate_on_test_set(test_loader)
 
-                total_loss += loss.item()
-                num_batches += 1
+            self.logger.info(f"客户端 {self.client_id} 个性化微调完成")
+            self.logger.info(f"测试指标: MSE={test_metrics['mse']:.6f}, MAE={test_metrics['mae']:.6f}, RMSE={test_metrics['rmse']:.6f}")
 
-            avg_loss = total_loss / max(num_batches, 1)
-            if avg_loss < best_loss:
-                best_loss = avg_loss
+            return test_metrics
 
-            if epoch % max(1, epochs // 5) == 0:  # 打印进度
-                self.logger.info(f"个性化微调 Epoch {epoch+1}/{epochs}, 训练损失: {avg_loss:.6f}")
-
-        # 切换到评估模式并在测试集上评估
-        self.model.eval()
-        test_metrics = self._evaluate_on_test_set(test_loader)
-
-        self.logger.info(f"客户端 {self.client_id} 个性化微调完成")
-        self.logger.info(f"测试集指标: MSE={test_metrics['mse']:.6f}, MAE={test_metrics['mae']:.6f}, RMSE={test_metrics['rmse']:.6f}")
-
-        return test_metrics
+        finally:
+            torch.cuda.empty_cache()
 
     def _evaluate_on_test_set(self, test_loader) -> Dict[str, float]:
         """在测试集上评估模型性能"""
@@ -273,30 +269,24 @@ class FederatedClient:
 
         with torch.no_grad():
             for batch_data in test_loader:
-                # 解包数据
-                if len(batch_data) == 4:  # TimeLLM格式
-                    x_enc, y_true, x_mark, y_mark = batch_data
-                    x_enc = x_enc.to(self.device)
-                    y_true = y_true.to(self.device)
-                    x_mark = x_mark.to(self.device)
-                    y_mark = y_mark.to(self.device)
+                x_enc, y_true, x_mark, y_mark = batch_data
+                x_enc = x_enc.to(self.device)
+                y_true = y_true.to(self.device)
+                x_mark = x_mark.to(self.device)
+                y_mark = y_mark.to(self.device)
 
-                    y_pred = self.model(x_enc, x_mark, None, y_mark)
-                else:  # 传统格式
-                    x_enc, y_true = batch_data
-                    x_enc = x_enc.to(self.device)
-                    y_true = y_true.to(self.device)
+                # 使用与训练一致的前向传播逻辑
+                if hasattr(self.args, 'label_len'):
+                    batch_size = x_enc.size(0)
+                    x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len, x_enc.size(-1)).to(self.device)
+                    x_dec[:, :self.args.label_len, :] = x_enc[:, -self.args.label_len:, :]
+                    x_mark_dec = torch.cat([x_mark[:, -self.args.label_len:, :], y_mark], dim=1)
+                    y_pred = self.shared_model(x_enc, x_mark, x_dec, x_mark_dec)
+                else:
+                    y_pred = self.shared_model(x_enc, x_mark, None, y_mark)
 
-                    batch_size, seq_len = x_enc.shape[:2]
-                    x_mark = torch.zeros(batch_size, seq_len, 4).to(self.device)
-                    y_mark = torch.zeros(batch_size, self.args.pred_len, 4).to(self.device)
-
-                    y_pred = self.model(x_enc.unsqueeze(-1), x_mark, None, y_mark)
-
-                # 计算指标
-                y_true_eval = y_true.unsqueeze(-1) if len(y_true.shape) == 2 else y_true
-                mse_loss = nn.MSELoss()(y_pred, y_true_eval)
-                mae_loss = nn.L1Loss()(y_pred, y_true_eval)
+                mse_loss = nn.MSELoss()(y_pred, y_true)
+                mae_loss = nn.L1Loss()(y_pred, y_true)
 
                 total_loss += mse_loss.item() * x_enc.size(0)
                 total_mae += mae_loss.item() * x_enc.size(0)
