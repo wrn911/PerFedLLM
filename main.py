@@ -131,6 +131,13 @@ def parse_args():
     parser.add_argument('--device', type=str, default='cuda:0',
                         help='设备 (cpu/cuda/auto)')
 
+    # =============== 联邦算法配置 ===============
+    parser.add_argument('--fed_algorithm', type=str, default='perfedavg',
+                       choices=['fedavg', 'fedprox', 'perfedavg'],
+                       help='选择联邦学习算法')
+    parser.add_argument('--fedprox_mu', type=float, default=0.01,
+                       help='FedProx正则化参数')
+
     return parser.parse_args()
 
 def getModel(args):

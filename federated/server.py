@@ -1,5 +1,5 @@
 """
-联邦学习服务器实现
+更新的联邦学习服务器实现 - 支持多种联邦算法
 """
 
 import torch
@@ -8,10 +8,11 @@ import numpy as np
 from typing import List, Dict, Optional
 from collections import defaultdict
 from .client import FederatedClient
+from .federated_algorithms import get_federated_algorithm
 
 
 class FederatedServer:
-    """联邦学习服务器"""
+    """支持多种联邦算法的联邦学习服务器"""
 
     def __init__(self, global_model: torch.nn.Module, args, logger, device: torch.device):
         self.global_model = global_model
@@ -19,8 +20,13 @@ class FederatedServer:
         self.logger = logger
         self.device = device
 
-        # 获取可训练参数名称
-        self.trainable_param_names = self._get_trainable_param_names()
+        # 获取联邦算法实例
+        fed_algorithm_name = getattr(args, 'fed_algorithm', 'perfedavg')
+        self.fed_algorithm = get_federated_algorithm(
+            fed_algorithm_name, global_model, args, logger, device
+        )
+
+        self.logger.info(f"使用联邦算法: {fed_algorithm_name.upper()}")
 
         # 训练历史
         self.training_history = {
@@ -28,14 +34,6 @@ class FederatedServer:
             'round_metrics': [],
             'client_metrics': defaultdict(list)
         }
-
-    def _get_trainable_param_names(self) -> List[str]:
-        """获取可训练参数名称"""
-        trainable_names = []
-        for name, param in self.global_model.named_parameters():
-            if param.requires_grad:
-                trainable_names.append(name)
-        return trainable_names
 
     def select_clients(self, all_clients: List[FederatedClient]) -> List[FederatedClient]:
         """随机选择参与训练的客户端"""
@@ -47,69 +45,14 @@ class FederatedServer:
 
         return selected_clients
 
-    def aggregate_gradients(self, client_gradients: List[Dict[str, torch.Tensor]],
-                          client_weights: Optional[List[float]] = None) -> Dict[str, torch.Tensor]:
-        """
-        FedAvg梯度聚合
-
-        Args:
-            client_gradients: 客户端梯度列表
-            client_weights: 客户端权重（如果为None则等权重）
-
-        Returns:
-            aggregated_gradients: 聚合后的梯度
-        """
-        if client_weights is None:
-            client_weights = [1.0 / len(client_gradients)] * len(client_gradients)
-
-        # 确保权重和为1
-        total_weight = sum(client_weights)
-        client_weights = [w / total_weight for w in client_weights]
-
-        aggregated_gradients = {}
-
-        # 对每个参数进行加权平均
-        for param_name in self.trainable_param_names:
-            if param_name in client_gradients[0]:
-                weighted_grads = []
-
-                for i, client_grad in enumerate(client_gradients):
-                    if param_name in client_grad:
-                        weighted_grad = client_grad[param_name] * client_weights[i]
-                        weighted_grads.append(weighted_grad)
-
-                if weighted_grads:
-                    aggregated_gradients[param_name] = torch.stack(weighted_grads).sum(dim=0)
-
-        self.logger.info(f"聚合 {len(client_gradients)} 个客户端的梯度")
-        return aggregated_gradients
-
-    def update_global_model(self, aggregated_gradients: Dict[str, torch.Tensor]):
-        """使用聚合梯度更新全局模型"""
-        model_state = self.global_model.state_dict()
-
-        for param_name, gradient in aggregated_gradients.items():
-            if param_name in model_state:
-                # 应用梯度更新：θ = θ - lr * ∇θ
-                model_state[param_name] -= self.args.lr * gradient.to(self.device)
-
-        self.global_model.load_state_dict(model_state)
-        self.logger.info("全局模型参数已更新")
-
-    def get_global_params(self) -> Dict[str, torch.Tensor]:
-        """获取全局模型的可训练参数"""
-        global_params = {}
-        model_state = self.global_model.state_dict()
-
-        for param_name in self.trainable_param_names:
-            if param_name in model_state:
-                global_params[param_name] = model_state[param_name].clone()
-
-        return global_params
-
     def federated_train(self, clients: List[FederatedClient]) -> Dict[str, float]:
         """执行联邦训练"""
         self.logger.info(f"开始联邦训练，共 {self.args.epochs} 轮")
+
+        # 如果设置epochs为0，跳过联邦训练
+        if self.args.epochs == 0:
+            self.logger.info("联邦训练轮数为0，跳过联邦训练阶段")
+            return {}
 
         for round_idx in range(self.args.epochs):
             self.logger.info(f"\n=== 联邦训练第 {round_idx + 1}/{self.args.epochs} 轮 ===")
@@ -118,37 +61,29 @@ class FederatedServer:
             selected_clients = self.select_clients(clients)
 
             # 2. 获取当前全局参数
-            global_params = self.get_global_params()
+            global_params = self.fed_algorithm.get_global_params()
 
             # 3. 客户端局部训练
-            client_gradients = []
-            client_weights = []
+            client_updates = []
 
             for client in selected_clients:
                 try:
-                    # 客户端训练并返回梯度
-                    gradients = client.local_train(global_params)
-                    client_gradients.append(gradients)
-
-                    # 计算客户端权重（基于数据量）
-                    data_size = len(client.data_loader.dataset)
-                    client_weights.append(data_size)
+                    # 使用对应算法的客户端更新方法
+                    client_update = self.fed_algorithm.client_update(client, global_params)
+                    client_updates.append(client_update)
 
                 except Exception as e:
                     self.logger.error(f"客户端 {client.client_id} 训练失败: {e}")
                     continue
 
-            if not client_gradients:
+            if not client_updates:
                 self.logger.warning(f"第 {round_idx + 1} 轮没有客户端成功训练")
                 continue
 
-            # 4. 梯度聚合
-            aggregated_gradients = self.aggregate_gradients(client_gradients, client_weights)
+            # 4. 服务器聚合（使用等权重平均）
+            self.fed_algorithm.server_aggregate(client_updates)
 
-            # 5. 更新全局模型
-            self.update_global_model(aggregated_gradients)
-
-            # 6. 评估当前轮次
+            # 5. 评估当前轮次
             if round_idx % self.args.eval_interval == 0:
                 round_metrics = self._evaluate_round(selected_clients)
                 self.training_history['round_metrics'].append(round_metrics)
@@ -159,6 +94,10 @@ class FederatedServer:
 
         self.logger.info("联邦训练完成!")
         return self.training_history['round_metrics'][-1] if self.training_history['round_metrics'] else {}
+
+    def get_global_params(self) -> Dict[str, torch.Tensor]:
+        """获取全局模型参数（委托给联邦算法对象）"""
+        return self.fed_algorithm.get_global_params()
 
     def _evaluate_round(self, clients: List[FederatedClient]) -> Dict[str, float]:
         """评估当前轮次的性能"""

@@ -1,152 +1,73 @@
 #!/bin/bash
 
-echo "=============================================== Autoformer:milano: net ==============================================="
-python main.py \
-    --model_type autoformer \
-    --file_path milano.h5 \
-    --experiment_name autoformer_milano_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
+# ================== 可配置参数 ==================
+# 定义模型列表、数据集列表和联邦学习算法列表
+MODELS=("autoformer" "dLinear" "informer" "timeMixer" "timesNet")
+DATASETS=("milano" "trento")
+FED_ALGORITHMS=("fedavg" "fedprox" "perfedavg")
+GPU_DEVICE="cuda:1" # 指定使用的GPU
 
-echo "=============================================== Autoformer:trento: net ==============================================="
-python main.py \
-    --model_type autoformer \
-    --file_path trento.h5 \
-    --experiment_name autoformer_trento_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
+# 定义公共参数
+SEQ_LEN=96
+LABEL_LEN=48
+PRED_LEN=24
+LOCAL_BS=64
 
-echo "=============================================== DLinear:milano: net ==============================================="
-python main.py \
-    --model_type dLinear \
-    --file_path milano.h5 \
-    --experiment_name dLinear_milano_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
+# ================== 实验执行 ==================
 
-echo "=============================================== DLinear:trento: net ==============================================="
-python main.py \
-    --model_type dLinear \
-    --file_path trento.h5 \
-    --experiment_name dLinear_trento_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
+echo "----------------------- 1. 本地独立训练 (基线) ------------------------------"
+for model in "${MODELS[@]}"; do
+    for dataset in "${DATASETS[@]}"; do
+        exp_name="${model}_${dataset}_net"
+        echo "================ Running: ${exp_name} ================"
+        python main.py \
+            --model_type "$model" \
+            --file_path "${dataset}.h5" \
+            --experiment_name "$exp_name" \
+            --data_type net \
+            --seq_len $SEQ_LEN \
+            --label_len $LABEL_LEN \
+            --pred_len $PRED_LEN \
+            --local_ep 0 \
+            --epoch 0 \
+            --personalized_epochs 20 \
+            --local_bs $LOCAL_BS \
+            --device $GPU_DEVICE
+    done
+done
 
-echo "=============================================== Informer:milano: net ==============================================="
-python main.py \
-    --model_type informer \
-    --file_path milano.h5 \
-    --experiment_name informer_milano_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
+echo ""
+echo "----------------------- 2. 联邦学习训练 ------------------------------"
+for algo in "${FED_ALGORITHMS[@]}"; do
+    echo "----------------------- Running Federated Algorithm: $algo ------------------------------"
+    for model in "${MODELS[@]}"; do
+        for dataset in "${DATASETS[@]}"; do
+            exp_name="${model}_${dataset}_net_${algo}"
+            echo "================ Running: ${exp_name} ================"
 
-echo "=============================================== Informer:trento: net ==============================================="
-python main.py \
-    --model_type informer \
-    --file_path trento.h5 \
-    --experiment_name informer_trento_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
+            # 构造参数
+            params=(
+                --model_type "$model"
+                --file_path "${dataset}.h5"
+                --experiment_name "$exp_name"
+                --data_type net
+                --seq_len $SEQ_LEN
+                --label_len $LABEL_LEN
+                --pred_len $PRED_LEN
+                --fed_algorithm "$algo"
+                --local_bs $LOCAL_BS
+                --device $GPU_DEVICE
+            )
 
-echo "=============================================== TimeMixer:milano: net ==============================================="
-python main.py \
-    --model_type timeMixer \
-    --file_path milano.h5 \
-    --experiment_name timeMixer_milano_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
+            # Per-FedAvg不需要personalized_epochs参数，其他需要设置为0
+            if [ "$algo" != "perfedavg" ]; then
+                params+=(--personalized_epochs 0)
+            fi
 
-echo "=============================================== TimeMixer:trento: net ==============================================="
-python main.py \
-    --model_type timeMixer \
-    --file_path trento.h5 \
-    --experiment_name timeMixer_trento_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
+            python main.py "${params[@]}"
+        done
+    done
+done
 
-echo "=============================================== TimesNet:milano: net ==============================================="
-python main.py \
-    --model_type timesNet \
-    --file_path milano.h5 \
-    --experiment_name timesNet_milano_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
 
-echo "=============================================== TimesNet:trento: net ==============================================="
-python main.py \
-    --model_type timesNet \
-    --file_path trento.h5 \
-    --experiment_name timesNet_trento_net \
-    --data_type net \
-    --seq_len 96 \
-    --label_len 48 \
-    --pred_len 24 \
-    --local_ep 0 \
-    --personalized_epochs 20 \
-    --epoch 0 \
-    --local_bs 64 \
-    --device cuda:1
-echo "=== 训练完成 ==="
+echo "=== 所有训练完成 ==="
