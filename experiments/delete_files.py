@@ -64,5 +64,5 @@ if __name__ == "__main__":
         root_dir=directory,
         target_names=filenames_to_delete,
         include_subdirs=True,
-        dry_run=True  # 👈 设为 False 才会真实删除
+        dry_run=False  # 👈 设为 False 才会真实删除
     )

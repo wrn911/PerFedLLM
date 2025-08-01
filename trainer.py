@@ -86,6 +86,7 @@ class PerFedLLMTrainerOptimized:
                 logger=self.logger,
                 device=self.device
             )
+            client.coordinates = client_data['coordinates']
 
             # 添加测试数据加载器
             if test_loader is not None:

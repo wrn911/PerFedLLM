@@ -118,7 +118,7 @@ class FederatedDataLoader:
         """
         为单个基站创建带时间特征的序列
         """
-        X, y, x_marks, y_marks = [], [], [], []
+        X, y, x_marks, y_marks, timestamps = [], [], [], [], []  # 添加timestamps列表
 
         for i in range(self.args.seq_len, len(cell_data) - self.args.pred_len + 1):
             # 历史序列
@@ -139,6 +139,14 @@ class FederatedDataLoader:
             x_marks.append(hist_time_features)
             y_marks.append(pred_time_features)
 
+            # 保存真实时间戳
+            timestamps.append({
+                'start_time': hist_timestamps[0],
+                'end_time': hist_timestamps[-1],
+                'pred_start': pred_timestamps[0],
+                'pred_end': pred_timestamps[-1]
+            })
+
         # 转换为numpy数组
         X = np.array(X)
         y = np.array(y)
@@ -155,13 +163,15 @@ class FederatedDataLoader:
                 'history': X[:train_len],
                 'target': y[:train_len],
                 'hist_marks': x_marks[:train_len],
-                'pred_marks': y_marks[:train_len]
+                'pred_marks': y_marks[:train_len],
+                'timestamps': timestamps[:train_len]  # 添加时间戳信息
             },
             'test': {
                 'history': X[-test_len:],
                 'target': y[-test_len:],
                 'hist_marks': x_marks[-test_len:],
-                'pred_marks': y_marks[-test_len:]
+                'pred_marks': y_marks[-test_len:],
+                'timestamps': timestamps[-test_len:]  # 添加时间戳信息
             }
         }
 
@@ -170,7 +180,8 @@ class FederatedDataLoader:
                 'history': X[train_len:train_len + val_len],
                 'target': y[train_len:train_len + val_len],
                 'hist_marks': x_marks[train_len:train_len + val_len],
-                'pred_marks': y_marks[train_len:train_len + val_len]
+                'pred_marks': y_marks[train_len:train_len + val_len],
+                'timestamps': timestamps[train_len:train_len + val_len]  # 添加时间戳信息
             }
 
         return sequences
@@ -221,6 +232,9 @@ class FederatedDataLoader:
                 y_mark = torch.FloatTensor(sequences[split]['pred_marks'])  # [N, pred_len, 4]
 
                 dataset = TensorDataset(X, y, x_mark, y_mark)
+
+                # 为dataset添加时间戳信息
+                dataset.timestamps = sequences[split]['timestamps']
 
                 # 训练集需要shuffle，测试集不需要
                 shuffle = (split == 'train')

@@ -1,3 +1,6 @@
+from datetime import datetime
+
+import pandas as pd
 from math import sqrt
 
 import torch
@@ -104,6 +107,8 @@ class Model(nn.Module):
 
         # 确保所有新添加的层使用float32
         self._ensure_float32_layers()
+        self.current_coordinates = None  # 存储当前处理的基站坐标信息
+        self.current_timestamps = None  # 存储当前处理的时间戳信息
 
     def _init_qwen3_model(self, configs):
         """初始化Qwen3模型 - 修复SSL问题"""
@@ -164,14 +169,14 @@ class Model(nn.Module):
 
     def _init_deepseek_model(self, configs):
         """初始化DeepSeek模型"""
-        self.deepseek_config = AutoConfig.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
+        self.deepseek_config = AutoConfig.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
         self.deepseek_config.num_hidden_layers = configs.llm_layers
         self.deepseek_config.output_attentions = True
         self.deepseek_config.output_hidden_states = True
 
         try:
             self.llm_model = AutoModel.from_pretrained(
-                "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
                 trust_remote_code=True,
                 local_files_only=True,
                 config=self.deepseek_config,
@@ -179,7 +184,7 @@ class Model(nn.Module):
         except EnvironmentError:
             print("Local model files not found. Attempting to download...")
             self.llm_model = AutoModel.from_pretrained(
-                "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
                 trust_remote_code=True,
                 local_files_only=False,
                 config=self.deepseek_config,
@@ -187,14 +192,14 @@ class Model(nn.Module):
 
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(
-                "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
                 trust_remote_code=True,
                 local_files_only=True
             )
         except EnvironmentError:
             print("Local tokenizer files not found. Attempting to download them..")
             self.tokenizer = AutoTokenizer.from_pretrained(
-                "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
                 trust_remote_code=True,
                 local_files_only=False
             )
@@ -238,7 +243,11 @@ class Model(nn.Module):
 
     def _init_bert_model(self, configs):
         """初始化BERT模型"""
-        self.bert_config = BertConfig.from_pretrained('google-bert/bert-base-uncased')
+        self.bert_config = BertConfig.from_pretrained(
+            'google-bert/bert-base-uncased',
+                trust_remote_code=True,
+                local_files_only=True
+        )
         self.bert_config.num_hidden_layers = configs.llm_layers
         self.bert_config.output_attentions = True
         self.bert_config.output_hidden_states = True
@@ -460,15 +469,31 @@ class Model(nn.Module):
             max_values_str = str(max_values[b].tolist()[0])
             median_values_str = str(medians[b].tolist()[0])
             lags_values_str = str(lags[b].tolist())
+
+            # 构建增强的提示词，包含时间戳和地理位置信息
+            location_desc = self._get_location_description(self.current_coordinates)
+
+            # 构建时间范围描述
+            if self.current_timestamps:
+                start_time = self._format_timestamp(self.current_timestamps['start'])
+                end_time = self._format_timestamp(self.current_timestamps['end'])
+                time_desc = f"from {start_time} to {end_time}"
+            else:
+                time_desc = f"over {self.seq_len} consecutive time steps"
+
             prompt_ = (
-                f"<|start_prompt|>Dataset description: {self.description}"
-                f"Task description: forecast the next {str(self.pred_len)} steps given the previous {str(self.seq_len)} steps information; "
-                "Input statistics: "
-                f"min value {min_values_str}, "
-                f"max value {max_values_str}, "
+                f"<|start_prompt|>Dataset description: This dataset contains wireless traffic data from a base station "
+                f"located at {location_desc}, recorded {time_desc}. "
+                f"Task description: Based on the previous {str(self.seq_len)} time steps of historical traffic data, "
+                f"predict the traffic patterns for the next {str(self.pred_len)} time steps. "
+                f"Input statistics: "
+                f"minimum value {min_values_str}, "
+                f"maximum value {max_values_str}, "
                 f"median value {median_values_str}, "
-                f"the trend of input is {'upward' if trends[b] > 0 else 'downward'}, "
-                f"top 5 lags are : {lags_values_str}<|<end_prompt>|>"
+                f"overall trend is {'upward' if trends[b] > 0 else 'downward'}, "
+                f"top 5 autocorrelation lags are {lags_values_str}. "
+                f"Please analyze the temporal patterns and trends in this historical data to predict future traffic variations "
+                f"for this base station.<|<end_prompt>|>"
             )
             prompt.append(prompt_)
 
@@ -511,6 +536,39 @@ class Model(nn.Module):
         self.output_projection = self.output_projection.float()
         self.normalize_layers = self.normalize_layers.float()
         self.ts2language = self.ts2language.float()
+
+    def set_context_info(self, coordinates=None, start_timestamp=None, end_timestamp=None):
+        """设置地理坐标和时间戳信息"""
+        self.current_coordinates = coordinates
+        if start_timestamp is not None and end_timestamp is not None:
+            self.current_timestamps = {
+                'start': start_timestamp,
+                'end': end_timestamp
+            }
+
+    def _format_timestamp(self, timestamp):
+        """格式化时间戳为可读格式"""
+        if isinstance(timestamp, (int, float)):
+            # 如果是Unix时间戳
+            dt = datetime.fromtimestamp(timestamp)
+        elif isinstance(timestamp, str):
+            # 如果是字符串格式的时间
+            dt = pd.to_datetime(timestamp)
+        else:
+            dt = timestamp
+
+        # 改为英文格式
+        return dt.strftime("%Y-%m-%d %H:%M")
+
+    def _get_location_description(self, coordinates):
+        """根据坐标生成地理位置描述"""
+        if coordinates is None:
+            return "Unknown Location"
+
+        lng = coordinates.get('lng', 0)
+        lat = coordinates.get('lat', 0)
+
+        return f"(Longitude: {lng:.4f}, Latitude: {lat:.4f})"
 
 class Embedding_layer(nn.Module):
     def __init__(self, configs):

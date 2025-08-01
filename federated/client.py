@@ -91,6 +91,25 @@ class FederatedClient:
                 eps=1e-8
             )
 
+            # 在训练循环开始前设置上下文信息
+            if hasattr(self.shared_model, 'set_context_info') and hasattr(self.data_loader.dataset, 'timestamps'):
+                coordinates = getattr(self, 'coordinates', None)
+                timestamps = self.data_loader.dataset.timestamps
+
+                if timestamps and len(timestamps) > 0:
+                    # 获取第一个和最后一个时间戳来确定整体时间范围
+                    first_timestamp = timestamps[0]
+                    last_timestamp = timestamps[-1]
+
+                    start_time = first_timestamp['start_time']
+                    end_time = last_timestamp['pred_end']
+
+                    self.shared_model.set_context_info(
+                        coordinates=coordinates,
+                        start_timestamp=start_time,
+                        end_timestamp=end_time
+                    )
+
             # 5. 局部训练
             self.shared_model.train()
             total_loss = 0.0
@@ -100,6 +119,25 @@ class FederatedClient:
             for step, batch_data in enumerate(self.data_loader):
                 if step >= max_steps:
                     break
+
+                # 每个batch设置当前时间范围
+                if hasattr(self.shared_model, 'set_context_info') and hasattr(self.data_loader.dataset, 'timestamps'):
+                    batch_start_idx = step * self.data_loader.batch_size
+                    batch_end_idx = min(batch_start_idx + self.data_loader.batch_size,
+                                        len(self.data_loader.dataset.timestamps))
+
+                    if batch_start_idx < len(self.data_loader.dataset.timestamps):
+                        batch_timestamps = self.data_loader.dataset.timestamps[batch_start_idx:batch_end_idx]
+                        if batch_timestamps:
+                            current_start = batch_timestamps[0]['start_time']
+                            current_end = batch_timestamps[-1]['pred_end'] if len(batch_timestamps) > 0 else \
+                            batch_timestamps[0]['pred_end']
+
+                            self.shared_model.set_context_info(
+                                coordinates=getattr(self, 'coordinates', None),
+                                start_timestamp=current_start,
+                                end_timestamp=current_end
+                            )
 
                 optimizer.zero_grad()
 
@@ -157,12 +195,45 @@ class FederatedClient:
     def evaluate(self) -> Dict[str, float]:
         """评估客户端模型性能"""
         self.shared_model.eval()
+
+        # 设置评估时的上下文信息
+        if hasattr(self.shared_model, 'set_context_info') and hasattr(self.data_loader.dataset, 'timestamps'):
+            coordinates = getattr(self, 'coordinates', None)
+            timestamps = self.data_loader.dataset.timestamps
+
+            if timestamps and len(timestamps) > 0:
+                start_time = timestamps[0]['start_time']
+                end_time = timestamps[-1]['pred_end']
+
+                self.shared_model.set_context_info(
+                    coordinates=coordinates,
+                    start_timestamp=start_time,
+                    end_timestamp=end_time
+                )
+
         total_loss = 0.0
         total_mae = 0.0
         num_samples = 0
 
         with torch.no_grad():
-            for batch_data in self.data_loader:
+            for step, batch_data in enumerate(self.data_loader):
+                # 为每个batch设置具体的时间范围
+                if hasattr(self.shared_model, 'set_context_info') and hasattr(self.data_loader.dataset, 'timestamps'):
+                    batch_start_idx = step * self.data_loader.batch_size
+                    if batch_start_idx < len(self.data_loader.dataset.timestamps):
+                        batch_timestamps = self.data_loader.dataset.timestamps[
+                                           batch_start_idx:batch_start_idx + batch_data[0].size(0)]
+                        if batch_timestamps:
+                            current_start = batch_timestamps[0]['start_time']
+                            current_end = batch_timestamps[-1]['pred_end'] if len(batch_timestamps) > 0 else \
+                            batch_timestamps[0]['pred_end']
+
+                            self.shared_model.set_context_info(
+                                coordinates=getattr(self, 'coordinates', None),
+                                start_timestamp=current_start,
+                                end_timestamp=current_end
+                            )
+
                 x_enc, y_true, x_mark, y_mark = batch_data
                 x_enc = x_enc.to(self.device)
                 y_true = y_true.to(self.device)
