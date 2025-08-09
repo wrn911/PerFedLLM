@@ -12,6 +12,7 @@ import os
 from typing import Dict
 from federated.client import FederatedClient
 from federated.server import FederatedServer
+from utils.communication_stats import print_communication_comparison
 
 
 class PerFedLLMTrainerOptimized:
@@ -120,6 +121,10 @@ class PerFedLLMTrainerOptimized:
         # 阶段2: 个性化微调（按批次处理）
         personalized_metrics = self._personalized_phase_batched()
 
+        # 新增：打印通信成本分析
+        if(self.args.calculate_communication):
+            self._print_communication_analysis()
+
         # 整理结果
         results = {
             'federated_metrics': federated_metrics,
@@ -181,3 +186,44 @@ class PerFedLLMTrainerOptimized:
                 self.logger.info(f"  {metric}: {value:.6f}")
 
         return personalized_results
+
+    def _print_communication_analysis(self):
+        """打印通信成本分析"""
+        # 获取当前算法的通信追踪器
+        current_tracker = self.server.get_communication_tracker()
+        current_algo = self.args.fed_algorithm
+
+        # 创建追踪器字典用于对比
+        trackers = {current_algo: current_tracker}
+
+        # 打印当前算法的通信统计
+        print_communication_comparison(trackers)
+
+        # 打印算法特性分析
+        self._print_algorithm_characteristics(current_algo)
+
+    def _print_algorithm_characteristics(self, algo_name: str):
+        """打印算法特性分析"""
+        print(f"\nAlgorithm Characteristics - {algo_name.upper()}:")
+        print("-" * 50)
+
+        if algo_name == 'fedavg':
+            print("• Upload Type: Complete model weights")
+            print("• Download Type: Global model weights")
+            print("• Communication Pattern: Symmetric (upload ≈ download)")
+            print("• Memory Efficiency: Standard")
+            print("• Convergence: Fast convergence, higher communication cost")
+
+        elif algo_name == 'perfedavg':
+            print("• Upload Type: Gradients")
+            print("• Download Type: Global model weights")
+            print("• Communication Pattern: Asymmetric (upload ≈ download in size)")
+            print("• Memory Efficiency: Better gradient aggregation")
+            print("• Convergence: Good convergence, moderate communication cost")
+
+        elif algo_name == 'fedprox':
+            print("• Upload Type: Complete model weights")
+            print("• Download Type: Global model weights")
+            print("• Communication Pattern: Symmetric (upload ≈ download)")
+            print("• Memory Efficiency: Standard + proximal term overhead")
+            print("• Convergence: Stable convergence, similar to FedAvg communication cost")

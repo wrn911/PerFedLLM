@@ -226,15 +226,44 @@ class FederatedDataLoader:
 
         for split in ['train', 'val', 'test']:
             if split in sequences:
-                X = torch.FloatTensor(sequences[split]['history']).unsqueeze(-1)  # [N, seq_len, 1]
-                y = torch.FloatTensor(sequences[split]['target']).unsqueeze(-1)  # [N, pred_len, 1]
-                x_mark = torch.FloatTensor(sequences[split]['hist_marks'])  # [N, seq_len, 4]
-                y_mark = torch.FloatTensor(sequences[split]['pred_marks'])  # [N, pred_len, 4]
+                X = torch.FloatTensor(sequences[split]['history']).unsqueeze(-1)
+                y = torch.FloatTensor(sequences[split]['target']).unsqueeze(-1)
+                x_mark = torch.FloatTensor(sequences[split]['hist_marks'])
+                y_mark = torch.FloatTensor(sequences[split]['pred_marks'])
 
                 dataset = TensorDataset(X, y, x_mark, y_mark)
 
                 # 为dataset添加时间戳信息
-                dataset.timestamps = sequences[split]['timestamps']
+                if 'timestamps' in sequences[split]:
+                    dataset.timestamps = sequences[split]['timestamps']
+
+                # 少样本学习：对训练集按比例采样
+                if split == 'train' and hasattr(self.args, 'train_ratio') and self.args.train_ratio < 1.0:
+                    original_size = len(dataset)
+                    sample_size = max(1, int(original_size * self.args.train_ratio))
+
+                    # 选择采样模式
+                    sample_mode = getattr(self.args, 'sample_mode', 'continuous')
+
+                    if sample_mode == 'continuous':
+                        # 连续采样：取前N%的时间步
+                        indices = torch.arange(sample_size)
+                        sampling_info = f"first {self.args.train_ratio * 100:.1f}% (continuous)"
+                    else:
+                        # 随机采样
+                        indices = torch.randperm(original_size)[:sample_size]
+                        sampling_info = f"{self.args.train_ratio * 100:.1f}% (random)"
+
+                    dataset = torch.utils.data.Subset(dataset, indices)
+
+                    # 如果原dataset有timestamps属性，需要对应采样
+                    if hasattr(dataset.dataset, 'timestamps'):
+                        original_timestamps = dataset.dataset.timestamps
+                        sampled_timestamps = [original_timestamps[i] for i in indices.tolist()]
+                        dataset.timestamps = sampled_timestamps
+
+                    print(f"Few-shot training: Using {len(dataset)} samples ({sampling_info}) "
+                          f"instead of {original_size} for {split} set")
 
                 # 训练集需要shuffle，测试集不需要
                 shuffle = (split == 'train')

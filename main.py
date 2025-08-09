@@ -92,6 +92,10 @@ def parse_args():
                        help='测试数据天数')
     parser.add_argument('--val_days', type=int, default=3,
                        help='验证数据天数')
+    parser.add_argument('--train_ratio', type=float, default=1.0,
+                        help='Ratio of training samples to use per client (0.0-1.0, uses first N% of time series)')
+    parser.add_argument('--sample_mode', type=str, default='continuous', choices=['continuous', 'random'],
+                        help='Sampling mode: continuous (first N%) or random sampling')
 
     # =============== 模型配置 ===============
     parser.add_argument('--model_type', type=str, default='timellm',
@@ -231,6 +235,8 @@ def parse_args():
                        help='选择联邦学习算法')
     parser.add_argument('--fedprox_mu', type=float, default=0.01,
                        help='FedProx正则化参数')
+    parser.add_argument('--calculate_communication', action='store_true', default=False,
+                       help='是否计算通信量')
 
     return parser.parse_args()
 

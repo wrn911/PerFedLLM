@@ -1,97 +1,6 @@
-# ============================================================================
-# 使用示例：
-#
-# 1. 评估SimpleTimeLLM模型：
-# python test_evaluation.py \
-#     --model_path ./experiments/simpletimellm/global_model.pth \
-#     --config_path ./experiments/simpletimellm/config.json \
-#     --save_results ./results/simpletimellm_metrics.json \
-#     --device cuda:0
-#
-# 2. 评估DLinear模型：
-# python test_evaluation.py \
-#     --model_path ./experiments/dlinear/global_model.pth \
-#     --config_path ./experiments/dlinear/config.json \
-#     --save_results ./results/dlinear_metrics.json \
-#     --device cuda:0
-#
-# 3. 在不同数据集上评估TimeMixer模型：
-# python test_evaluation.py \
-#     --model_path ./experiments/timemixer/global_model.pth \
-#     --config_path ./experiments/timemixer/config.json \
-#     --data_file milano.h5 \
-#     --data_type call \
-#     --save_results ./results/timemixer_call_metrics.json \
-#     --device cuda:0
-#
-# 4. 评估Autoformer模型：
-# python test_evaluation.py \
-#     --model_path ./experiments/autoformer/global_model.pth \
-#     --config_path ./experiments/autoformer/config.json \
-#     --save_results ./results/autoformer_metrics.json \
-#     --device cuda:0
-#
-# 5. 批量比较多个模型（使用脚本）：
-# #!/bin/bash
-# models=("simpletimellm" "dlinear" "timemixer" "autoformer" "timesnet")
-# for model in "${models[@]}"; do
-#     echo "Evaluating $model..."
-#     python test_evaluation.py \
-#         --model_path ./experiments/$model/global_model.pth \
-#         --config_path ./experiments/$model/config.json \
-#         --save_results ./results/${model}_metrics.json \
-#         --device cuda:0
-# done
-#
-# 6. 创建模型比较脚本（compare_models.py）：
-# import json
-# import pandas as pd
-#
-# models = ["simpletimellm", "dlinear", "timemixer", "autoformer", "timesnet"]
-# comparison_data = []
-#
-# for model in models:
-#     try:
-#         with open(f"./results/{model}_metrics.json", "r") as f:
-#             results = json.load(f)
-#             global_metrics = results["global_metrics"]
-#             comparison_data.append({
-#                 "Model": model,
-#                 "MSE": global_metrics["Global_MSE"],
-#                 "MAE": global_metrics["Global_MAE"],
-#                 "RMSE": global_metrics["Global_RMSE"],
-#                 "Clients": global_metrics["Num_clients"],
-#                 "Samples": global_metrics["Total_samples"]
-#             })
-#     except FileNotFoundError:
-#         print(f"Results file for {model} not found")
-#
-# df = pd.DataFrame(comparison_data)
-# df = df.sort_values("MSE")  # 按MSE排序
-# print("Model Performance Comparison:")
-# print(df.to_string(index=False))
-# df.to_csv("./results/model_comparison.csv", index=False)
-#
-# 支持的模型类型：
-# - simpletimellm: SimpleTimeLLM
-# - timellm: TimeLLM
-# - dLinear: DLinear
-# - autoformer: Autoformer
-# - informer: Informer
-# - timeMixer: TimeMixer
-# - timesNet: TimesNet
-#
-# 参数说明：
-# --model_path: 训练好的模型文件路径
-# --config_path: 配置文件路径（会自动识别模型类型）
-# --data_file: 数据文件名（可选，不指定则使用配置文件中的设置）
-# --data_type: 流量类型 net/call/sms（可选，不指定则使用配置文件中的设置）
-# --save_results: 结果保存路径（可选，JSON格式）
-# --device: 使用的设备
-# ============================================================================"""
 """
-模型测试集评估脚本
-用于加载训练好的模型，在指定数据集的测试集上计算MSE和MAE指标
+模型测试集评估脚本 - 支持详细数据保存
+用于加载训练好的模型，在指定数据集的测试集上计算MSE和MAE指标，并保存详细的预测数据
 """
 
 import torch
@@ -200,9 +109,42 @@ def load_model(model_path: str, model_class, args, device: torch.device):
     return model
 
 
-def evaluate_model_on_dataset(model, model_type: str, federated_data: Dict,
-                              data_loader_factory, device: torch.device) -> Dict[str, float]:
-    """在整个数据集的测试集上评估模型"""
+def get_normalization_params(federated_data: Dict, client_id: str):
+    """获取客户端的标准化参数"""
+    norm_params = federated_data['metadata'].get('norm_params', None)
+    if norm_params and 'mean' in norm_params and 'std' in norm_params:
+        # 尝试不同的键类型匹配
+        for key_type in [int(client_id), str(client_id), client_id]:
+            if key_type in norm_params['mean'] and key_type in norm_params['std']:
+                mean = float(norm_params['mean'][key_type])
+                std = float(norm_params['std'][key_type])
+                return {'mean': mean, 'std': std}
+    return None
+
+
+def denormalize_data(data: np.ndarray, norm_params: Dict) -> np.ndarray:
+    """反标准化数据"""
+    if norm_params:
+        return data * norm_params['std'] + norm_params['mean']
+    return data
+
+
+def calculate_sample_metrics(pred: np.ndarray, true: np.ndarray) -> Dict[str, float]:
+    """计算单个样本的指标"""
+    mse = float(np.mean((pred - true) ** 2))
+    mae = float(np.mean(np.abs(pred - true)))
+    rmse = float(np.sqrt(mse))
+
+    return {
+        'mse': mse,
+        'mae': mae,
+        'rmse': rmse
+    }
+
+
+def evaluate_model_detailed(model, model_type: str, federated_data: Dict,
+                            data_loader_factory, device: torch.device, save_detailed: str = None) -> Dict[str, float]:
+    """在整个数据集的测试集上评估模型并保存详细数据"""
     logger = logging.getLogger(__name__)
     model.eval()
 
@@ -210,31 +152,52 @@ def evaluate_model_on_dataset(model, model_type: str, federated_data: Dict,
     all_targets = []
     client_metrics = {}
 
+    # 准备详细数据保存目录
+    if save_detailed:
+        os.makedirs(save_detailed, exist_ok=True)
+        logger.info(f"将保存详细数据到: {save_detailed}")
+
     logger.info(f"Evaluating {model_type} model on {len(federated_data['clients'])} clients...")
 
     for client_id, client_data in federated_data['clients'].items():
+        client_id_str = str(client_id)
+        logger.info(f"Processing client {client_id_str}...")
+
         # 为每个客户端创建测试数据加载器
         data_loaders = data_loader_factory.create_data_loaders(
             client_data['sequences'],
-            batch_size=32  # 使用较大的batch size加速评估
+            batch_size=32
         )
 
         if 'test' not in data_loaders:
-            logger.warning(f"No test data for client {client_id}")
+            logger.warning(f"No test data for client {client_id_str}")
             continue
 
         test_loader = data_loaders['test']
         coordinates = client_data.get('coordinates', None)
 
-        # 设置模型的上下文信息（如果支持，主要是LLM模型）
+        # 设置模型的上下文信息
         if hasattr(model, 'set_context_info') and coordinates:
             model.set_context_info(coordinates=coordinates)
 
+        # 获取标准化参数
+        norm_params = get_normalization_params(federated_data, client_id_str)
+
         client_predictions = []
         client_targets = []
+        client_history = []
+
+        # 用于保存详细数据的列表
+        client_detailed_data = {
+            'client_id': client_id_str,
+            'coordinates': coordinates,
+            'normalization_params': norm_params,
+            'samples': [],
+            'client_metrics': {}
+        }
 
         with torch.no_grad():
-            for batch_data in test_loader:
+            for batch_idx, batch_data in enumerate(test_loader):
                 x_enc, y_true, x_mark, y_mark = batch_data
                 x_enc = x_enc.to(device)
                 y_true = y_true.to(device)
@@ -243,23 +206,18 @@ def evaluate_model_on_dataset(model, model_type: str, federated_data: Dict,
 
                 # 根据不同模型类型进行前向传播
                 if model_type in ['timellm', 'simpletimellm']:
-                    # LLM系列模型
                     batch_size = x_enc.size(0)
                     if hasattr(model, 'args') and hasattr(model.args, 'label_len'):
-                        # 创建decoder输入
                         x_dec = torch.zeros(batch_size, model.args.label_len + model.args.pred_len, x_enc.size(-1)).to(
                             device)
                         x_dec[:, :model.args.label_len, :] = x_enc[:, -model.args.label_len:, :]
                         x_mark_dec = torch.cat([x_mark[:, -model.args.label_len:, :], y_mark], dim=1)
                         y_pred = model(x_enc, x_mark, x_dec, x_mark_dec)
                     else:
-                        # 简化版本
                         y_pred = model(x_enc, x_mark, None, y_mark)
 
                 elif model_type in ['autoformer', 'informer']:
-                    # Transformer系列模型，需要decoder输入
                     batch_size = x_enc.size(0)
-                    # 创建decoder输入
                     x_dec = torch.zeros(batch_size, model.args.label_len + model.args.pred_len, x_enc.size(-1)).to(
                         device)
                     x_dec[:, :model.args.label_len, :] = x_enc[:, -model.args.label_len:, :]
@@ -267,15 +225,12 @@ def evaluate_model_on_dataset(model, model_type: str, federated_data: Dict,
                     y_pred = model(x_enc, x_mark, x_dec, x_mark_dec)
 
                 elif model_type in ['dLinear', 'timeMixer', 'timesNet']:
-                    # 其他模型，通常只需要encoder输入
                     y_pred = model(x_enc, x_mark, None, y_mark)
 
                 else:
-                    # 默认处理方式
                     try:
                         y_pred = model(x_enc, x_mark, None, y_mark)
                     except:
-                        # 如果失败，尝试带decoder的方式
                         batch_size = x_enc.size(0)
                         x_dec = torch.zeros(batch_size, model.args.label_len + model.args.pred_len, x_enc.size(-1)).to(
                             device)
@@ -283,25 +238,109 @@ def evaluate_model_on_dataset(model, model_type: str, federated_data: Dict,
                         x_mark_dec = torch.cat([x_mark[:, -model.args.label_len:, :], y_mark], dim=1)
                         y_pred = model(x_enc, x_mark, x_dec, x_mark_dec)
 
-                # 收集预测和真实值
-                client_predictions.append(y_pred.cpu().numpy())
-                client_targets.append(y_true.cpu().numpy())
+                # 转换为numpy并收集数据
+                hist_np = x_enc.cpu().numpy()
+                pred_np = y_pred.cpu().numpy()
+                true_np = y_true.cpu().numpy()
+
+                client_predictions.append(pred_np)
+                client_targets.append(true_np)
+                client_history.append(hist_np)
+
+                # 如果需要保存详细数据，处理每个样本
+                if save_detailed:
+                    for sample_idx in range(pred_np.shape[0]):
+                        hist_sample = hist_np[sample_idx].squeeze()  # [seq_len]
+                        pred_sample = pred_np[sample_idx].squeeze()  # [pred_len]
+                        true_sample = true_np[sample_idx].squeeze()  # [pred_len]
+
+                        # 计算归一化后的指标
+                        norm_metrics = calculate_sample_metrics(pred_sample, true_sample)
+
+                        # 准备样本数据
+                        sample_data = {
+                            'sample_id': len(client_detailed_data['samples']),
+                            'normalized': {
+                                'history': hist_sample.tolist(),
+                                'prediction': pred_sample.tolist(),
+                                'ground_truth': true_sample.tolist(),
+                                'metrics': norm_metrics
+                            }
+                        }
+
+                        # 如果有标准化参数，计算反标准化后的数据和指标
+                        if norm_params:
+                            hist_denorm = denormalize_data(hist_sample, norm_params)
+                            pred_denorm = denormalize_data(pred_sample, norm_params)
+                            true_denorm = denormalize_data(true_sample, norm_params)
+
+                            denorm_metrics = calculate_sample_metrics(pred_denorm, true_denorm)
+
+                            sample_data['denormalized'] = {
+                                'history': hist_denorm.tolist(),
+                                'prediction': pred_denorm.tolist(),
+                                'ground_truth': true_denorm.tolist(),
+                                'metrics': denorm_metrics
+                            }
+
+                        client_detailed_data['samples'].append(sample_data)
 
         if client_predictions:
             # 合并当前客户端的所有预测
             client_pred = np.concatenate(client_predictions, axis=0)
             client_true = np.concatenate(client_targets, axis=0)
 
-            # 计算客户端指标
+            # 计算客户端整体指标（归一化后）
             client_mse = np.mean((client_pred - client_true) ** 2)
             client_mae = np.mean(np.abs(client_pred - client_true))
+            client_rmse = np.sqrt(client_mse)
 
-            client_metrics[str(client_id)] = {
+            client_metrics[client_id_str] = {
                 'MSE': client_mse,
                 'MAE': client_mae,
-                'RMSE': np.sqrt(client_mse),
+                'RMSE': client_rmse,
                 'samples': len(client_pred)
             }
+
+            # 如果需要保存详细数据
+            if save_detailed:
+                # 计算客户端平均指标
+                if client_detailed_data['samples']:
+                    # 归一化后的平均指标
+                    norm_mses = [s['normalized']['metrics']['mse'] for s in client_detailed_data['samples']]
+                    norm_maes = [s['normalized']['metrics']['mae'] for s in client_detailed_data['samples']]
+                    norm_rmses = [s['normalized']['metrics']['rmse'] for s in client_detailed_data['samples']]
+
+                    client_detailed_data['client_metrics']['normalized'] = {
+                        'avg_mse': float(np.mean(norm_mses)),
+                        'avg_mae': float(np.mean(norm_maes)),
+                        'avg_rmse': float(np.mean(norm_rmses)),
+                        'std_mse': float(np.std(norm_mses)),
+                        'std_mae': float(np.std(norm_maes)),
+                        'std_rmse': float(np.std(norm_rmses))
+                    }
+
+                    # 如果有反标准化数据，计算反标准化后的平均指标
+                    if norm_params and 'denormalized' in client_detailed_data['samples'][0]:
+                        denorm_mses = [s['denormalized']['metrics']['mse'] for s in client_detailed_data['samples']]
+                        denorm_maes = [s['denormalized']['metrics']['mae'] for s in client_detailed_data['samples']]
+                        denorm_rmses = [s['denormalized']['metrics']['rmse'] for s in client_detailed_data['samples']]
+
+                        client_detailed_data['client_metrics']['denormalized'] = {
+                            'avg_mse': float(np.mean(denorm_mses)),
+                            'avg_mae': float(np.mean(denorm_maes)),
+                            'avg_rmse': float(np.mean(denorm_rmses)),
+                            'std_mse': float(np.std(denorm_mses)),
+                            'std_mae': float(np.std(denorm_maes)),
+                            'std_rmse': float(np.std(denorm_rmses))
+                        }
+
+                # 保存客户端详细数据
+                client_file = os.path.join(save_detailed, f'client_{client_id_str}.json')
+                with open(client_file, 'w', encoding='utf-8') as f:
+                    json.dump(client_detailed_data, f, indent=2, ensure_ascii=False)
+
+                logger.info(f"客户端 {client_id_str} 详细数据已保存到 {client_file}")
 
             # 添加到全局列表
             all_predictions.extend(client_predictions)
@@ -350,32 +389,6 @@ def evaluate_model_on_dataset(model, model_type: str, federated_data: Dict,
     return global_metrics, client_metrics
 
 
-def denormalize_if_needed(federated_data: Dict, client_metrics: Dict) -> Dict:
-    """如果存在标准化参数，反标准化指标"""
-    norm_params = federated_data['metadata'].get('norm_params', None)
-    if norm_params is None:
-        return client_metrics
-
-    logger = logging.getLogger(__name__)
-    logger.info("Denormalizing metrics...")
-
-    denorm_metrics = {}
-    for client_id, metrics in client_metrics.items():
-        if client_id in norm_params['mean'] and client_id in norm_params['std']:
-            std_val = norm_params['std'][int(client_id)]
-            # MSE需要乘以std的平方，MAE和RMSE乘以std
-            denorm_metrics[client_id] = {
-                'MSE': metrics['MSE'] * (std_val ** 2),
-                'MAE': metrics['MAE'] * std_val,
-                'RMSE': metrics['RMSE'] * std_val,
-                'samples': metrics['samples']
-            }
-        else:
-            denorm_metrics[client_id] = metrics
-
-    return denorm_metrics
-
-
 def print_evaluation_results(global_metrics: Dict, client_metrics: Dict):
     """打印评估结果"""
     logger = logging.getLogger(__name__)
@@ -420,7 +433,7 @@ def convert_numpy_types(obj):
         return float(obj)
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
-    elif hasattr(obj, 'item'):  # 处理单元素numpy数组
+    elif hasattr(obj, 'item'):
         return obj.item()
     else:
         return obj
@@ -445,32 +458,12 @@ def save_results(global_metrics: Dict, client_metrics: Dict, save_path: str):
         logger.info(f"Results saved to: {save_path}")
     except Exception as e:
         logger.error(f"Failed to save results: {e}")
-        # 尝试保存一个简化版本
-        try:
-            simplified_results = {
-                'global_metrics': {
-                    'Model_type': str(global_metrics.get('Model_type', 'Unknown')),
-                    'Global_MSE': float(global_metrics.get('Global_MSE', 0)),
-                    'Global_MAE': float(global_metrics.get('Global_MAE', 0)),
-                    'Global_RMSE': float(global_metrics.get('Global_RMSE', 0)),
-                    'Total_samples': int(global_metrics.get('Total_samples', 0)),
-                    'Num_clients': int(global_metrics.get('Num_clients', 0))
-                },
-                'summary': 'Simplified results due to serialization issues'
-            }
-
-            simplified_path = save_path.replace('.json', '_simplified.json')
-            with open(simplified_path, 'w', encoding='utf-8') as f:
-                json.dump(simplified_results, f, indent=2, ensure_ascii=False)
-            logger.info(f"Simplified results saved to: {simplified_path}")
-        except Exception as e2:
-            logger.error(f"Failed to save even simplified results: {e2}")
 
 
 def main():
     """主函数"""
     # 解析命令行参数
-    parser = argparse.ArgumentParser(description='SimpleTimeLLM Model Test Set Evaluation')
+    parser = argparse.ArgumentParser(description='Model Test Set Evaluation with Detailed Data Saving')
     parser.add_argument('--model_path', type=str, required=True,
                         help='Path to the trained model (.pth file)')
     parser.add_argument('--config_path', type=str, required=True,
@@ -482,6 +475,8 @@ def main():
                         help='Traffic data type. If not specified, use config file setting')
     parser.add_argument('--save_results', type=str, default=None,
                         help='Path to save evaluation results (JSON format)')
+    parser.add_argument('--save_detailed', type=str, default=None,
+                        help='Directory to save detailed prediction data for each client')
     parser.add_argument('--device', type=str, default='cuda:0',
                         help='Device to use (cuda:0/cpu)')
 
@@ -514,21 +509,17 @@ def main():
         # 4. 加载数据
         logger.info(f"Loading federated data from {config_args.file_path} (type: {config_args.data_type})...")
         federated_data, data_loader_factory = get_federated_data(config_args)
-
         logger.info(f"Loaded {len(federated_data['clients'])} clients")
 
         # 5. 加载模型
         logger.info(f"Loading {config_args.model_type} model...")
         model = load_model(args.model_path, model_class, config_args, device)
 
-        # 6. 评估模型
+        # 6. 评估模型（包含详细数据保存）
         logger.info("Evaluating model on test set...")
-        global_metrics, client_metrics = evaluate_model_on_dataset(
-            model, config_args.model_type, federated_data, data_loader_factory, device
+        global_metrics, client_metrics = evaluate_model_detailed(
+            model, config_args.model_type, federated_data, data_loader_factory, device, args.save_detailed
         )
-
-        # 6. 反标准化指标（如果需要）
-        client_metrics = denormalize_if_needed(federated_data, client_metrics)
 
         # 7. 打印结果
         print_evaluation_results(global_metrics, client_metrics)
@@ -547,40 +538,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# ============================================================================
-# 使用示例：
-#
-# 1. 使用配置文件中的数据设置：
-# python test_evaluation.py \
-#     --model_path ./experiments/perfedllm_optimized/global_model.pth \
-#     --config_path ./experiments/perfedllm_optimized/config.json \
-#     --save_results ./results/test_metrics.json \
-#     --device cuda:0
-#
-# 2. 指定不同的数据文件和流量类型：
-# python test_evaluation.py \
-#     --model_path ./experiments/perfedllm_optimized/global_model.pth \
-#     --config_path ./experiments/perfedllm_optimized/config.json \
-#     --data_file milano.h5 \
-#     --data_type call \
-#     --save_results ./results/call_traffic_metrics.json \
-#     --device cuda:0
-#
-# 3. 评估不同数据集：
-# python test_evaluation.py \
-#     --model_path ./experiments/perfedllm_optimized/global_model.pth \
-#     --config_path ./experiments/perfedllm_optimized/config.json \
-#     --data_file another_dataset.h5 \
-#     --data_type net \
-#     --save_results ./results/another_dataset_metrics.json \
-#     --device cuda:0
-#
-# 参数说明：
-# --model_path: 训练好的模型文件路径
-# --config_path: 配置文件路径
-# --data_file: 数据文件名（可选，不指定则使用配置文件中的设置）
-# --data_type: 流量类型 net/call/sms（可选，不指定则使用配置文件中的设置）
-# --save_results: 结果保存路径（可选，JSON格式）
-# --device: 使用的设备
-# ============================================================================

@@ -35,6 +35,10 @@ class FederatedServer:
             'client_metrics': defaultdict(list)
         }
 
+    def get_communication_tracker(self):
+        """获取通信追踪器"""
+        return self.fed_algorithm.comm_tracker
+
     def select_clients(self, all_clients: List[FederatedClient]) -> List[FederatedClient]:
         """随机选择参与训练的客户端"""
         num_selected = max(1, int(len(all_clients) * self.args.frac))

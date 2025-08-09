@@ -323,7 +323,7 @@ python main.py \
 python main.py \
     --model_type simpletimellm \
     --file_path milano.h5 \
-    --experiment_name simpletimellm_milano_call_perfedavg_BERT \
+    --experiment_name simpletimellm_milano_call_perfedavg_BERT_temp \
     --data_type call \
     --llm_model BERT\
     --llm_dim 768\
@@ -341,7 +341,7 @@ python main.py \
 python main.py \
     --model_type simpletimellm \
     --file_path milano.h5 \
-    --experiment_name simpletimellm_milano_net_perfedavg_BERT \
+    --experiment_name simpletimellm_milano_net_perfedavg_BERT_temp \
     --data_type net \
     --llm_model BERT\
     --llm_dim 768\
@@ -359,7 +359,7 @@ python main.py \
 python main.py \
     --model_type simpletimellm \
     --file_path milano.h5 \
-    --experiment_name simpletimellm_milano_sms_perfedavg_BERT \
+    --experiment_name simpletimellm_milano_sms_perfedavg_BERT_temp \
     --data_type sms \
     --llm_model BERT\
     --llm_dim 768\

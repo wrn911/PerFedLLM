@@ -10,6 +10,8 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
+from utils.communication_stats import CommunicationTracker
+
 
 class FederatedAlgorithmBase(ABC):
     """联邦学习算法基类"""
@@ -20,6 +22,9 @@ class FederatedAlgorithmBase(ABC):
         self.logger = logger
         self.device = device
         self.trainable_param_names = self._get_trainable_param_names()
+
+        # 添加通信追踪器
+        self.comm_tracker = CommunicationTracker()
 
     def _get_trainable_param_names(self) -> List[str]:
         """获取可训练参数名称"""
@@ -46,10 +51,13 @@ class FederatedAlgorithmBase(ABC):
 
 
 class FedAvgAlgorithm(FederatedAlgorithmBase):
-    """FedAvg算法实现"""
+    """FedAvg算法实现 - 修复版"""
 
     def client_update(self, client, global_params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """FedAvg客户端更新：返回模型权重"""
+        # 记录下载全局参数
+        self.comm_tracker.record_download(global_params)
+
         # 保存训练前状态
         client._save_model_state()
 
@@ -66,32 +74,46 @@ class FedAvgAlgorithm(FederatedAlgorithmBase):
             )
 
             client.shared_model.train()
-            for step, batch_data in enumerate(client.data_loader):
-                if step >= self.args.local_ep:
-                    break
 
-                optimizer.zero_grad()
-                x_enc, y_true, x_mark, y_mark = batch_data
-                x_enc = x_enc.to(self.device)
-                y_true = y_true.to(self.device)
-                x_mark = x_mark.to(self.device)
-                y_mark = y_mark.to(self.device)
+            # 获取本地训练轮数（修复：使用正确的轮数控制）
+            local_epochs = getattr(self.args, 'local_epochs', self.args.local_ep)
 
-                # 前向传播
-                if hasattr(self.args, 'label_len'):
-                    batch_size = x_enc.size(0)
-                    x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len, x_enc.size(-1)).to(
-                        self.device)
-                    x_dec[:, :self.args.label_len, :] = x_enc[:, -self.args.label_len:, :]
-                    x_mark_dec = torch.cat([x_mark[:, -self.args.label_len:, :], y_mark], dim=1)
-                    y_pred = client.shared_model(x_enc, x_mark, x_dec, x_mark_dec)
-                else:
-                    y_pred = client.shared_model(x_enc, x_mark, None, y_mark)
+            # 外层：训练轮数循环
+            for epoch in range(local_epochs):
+                epoch_loss = 0.0
+                num_batches = 0
 
-                loss = client.criterion(y_pred, y_true)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(client.shared_model.parameters(), max_norm=1.0)
-                optimizer.step()
+                # 内层：数据批次循环
+                for batch_idx, batch_data in enumerate(client.data_loader):
+                    optimizer.zero_grad()
+                    x_enc, y_true, x_mark, y_mark = batch_data
+                    x_enc = x_enc.to(self.device)
+                    y_true = y_true.to(self.device)
+                    x_mark = x_mark.to(self.device)
+                    y_mark = y_mark.to(self.device)
+
+                    # 前向传播
+                    if hasattr(self.args, 'label_len'):
+                        batch_size = x_enc.size(0)
+                        x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len, x_enc.size(-1)).to(
+                            self.device)
+                        x_dec[:, :self.args.label_len, :] = x_enc[:, -self.args.label_len:, :]
+                        x_mark_dec = torch.cat([x_mark[:, -self.args.label_len:, :], y_mark], dim=1)
+                        y_pred = client.shared_model(x_enc, x_mark, x_dec, x_mark_dec)
+                    else:
+                        y_pred = client.shared_model(x_enc, x_mark, None, y_mark)
+
+                    loss = client.criterion(y_pred, y_true)
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(client.shared_model.parameters(), max_norm=1.0)
+                    optimizer.step()
+
+                    epoch_loss += loss.item()
+                    num_batches += 1
+
+                # 打印训练进度（可选）
+                avg_loss = epoch_loss / max(num_batches, 1)
+                self.logger.debug(f"客户端 {client.client_id} Epoch {epoch + 1}/{local_epochs}, 损失: {avg_loss:.6f}")
 
             # 返回更新后的模型权重
             updated_params = {}
@@ -99,6 +121,9 @@ class FedAvgAlgorithm(FederatedAlgorithmBase):
             for name in self.trainable_param_names:
                 if name in current_state:
                     updated_params[name] = current_state[name].clone()
+
+            # 记录上传完整模型权重
+            self.comm_tracker.record_upload(updated_params)
 
             return updated_params
 
@@ -108,9 +133,10 @@ class FedAvgAlgorithm(FederatedAlgorithmBase):
 
     def server_aggregate(self, client_updates: List[Dict[str, torch.Tensor]]) -> None:
         """FedAvg服务器聚合：直接平均模型权重"""
+        self.comm_tracker.new_round()
+
         # 等权重平均
         num_clients = len(client_updates)
-
         # 平均模型参数
         model_state = self.global_model.state_dict()
         for param_name in self.trainable_param_names:
@@ -142,6 +168,9 @@ class FedProxAlgorithm(FederatedAlgorithmBase):
 
     def client_update(self, client, global_params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """FedProx客户端更新：添加邻近项正则化"""
+        # 记录下载全局参数
+        self.comm_tracker.record_download(global_params)
+
         # 保存训练前状态
         client._save_model_state()
 
@@ -162,8 +191,6 @@ class FedProxAlgorithm(FederatedAlgorithmBase):
 
             client.shared_model.train()
             for step, batch_data in enumerate(client.data_loader):
-                if step >= self.args.local_ep:
-                    break
 
                 optimizer.zero_grad()
                 x_enc, y_true, x_mark, y_mark = batch_data
@@ -206,6 +233,7 @@ class FedProxAlgorithm(FederatedAlgorithmBase):
                 if name in current_state:
                     updated_params[name] = current_state[name].clone()
 
+            self.comm_tracker.record_upload(updated_params)
             return updated_params
 
         finally:
@@ -214,6 +242,7 @@ class FedProxAlgorithm(FederatedAlgorithmBase):
 
     def server_aggregate(self, client_updates: List[Dict[str, torch.Tensor]]) -> None:
         """FedProx服务器聚合：与FedAvg相同"""
+        self.comm_tracker.new_round()
         # FedProx的聚合策略与FedAvg相同，直接调用FedAvg的聚合方法
         fedavg_algorithm = FedAvgAlgorithm(self.global_model, self.args, self.logger, self.device)
         fedavg_algorithm.server_aggregate(client_updates)
@@ -224,13 +253,22 @@ class PerFedAvgAlgorithm(FederatedAlgorithmBase):
 
     def client_update(self, client, global_params: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """Per-FedAvg客户端更新：返回梯度"""
-        return client.local_train(global_params)  # 直接使用现有的梯度计算逻辑
+        # 记录下载全局参数
+        self.comm_tracker.record_download(global_params)
+
+        # 使用现有的梯度计算逻辑
+        gradients = client.local_train(global_params)
+
+        # 记录上传梯度（通常与权重大小相同，但语义不同）
+        self.comm_tracker.record_upload(gradients)
+        return gradients
 
     def server_aggregate(self, client_gradients: List[Dict[str, torch.Tensor]]) -> None:
         """Per-FedAvg服务器聚合：聚合梯度并更新全局模型"""
+        self.comm_tracker.new_round()
+
         # 等权重平均梯度
         num_clients = len(client_gradients)
-
         # 聚合梯度
         aggregated_gradients = {}
         for param_name in self.trainable_param_names:

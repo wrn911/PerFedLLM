@@ -209,7 +209,7 @@ class Model(nn.Module):
 
     def _init_gpt2_model(self, configs):
         """初始化GPT2模型"""
-        self.gpt2_config = GPT2Config.from_pretrained('openai-community/gpt2')
+        self.gpt2_config = GPT2Config.from_pretrained('openai-community/gpt2', local_files_only=True)
         self.gpt2_config.num_hidden_layers = configs.llm_layers
         self.gpt2_config.output_attentions = True
         self.gpt2_config.output_hidden_states = True
@@ -246,7 +246,7 @@ class Model(nn.Module):
 
     def _init_bert_model(self, configs):
         """初始化BERT模型"""
-        self.bert_config = BertConfig.from_pretrained('google-bert/bert-base-uncased')
+        self.bert_config = BertConfig.from_pretrained('google-bert/bert-base-uncased',local_files_only=True)
         self.bert_config.num_hidden_layers = configs.llm_layers
         self.bert_config.output_attentions = True
         self.bert_config.output_hidden_states = True
