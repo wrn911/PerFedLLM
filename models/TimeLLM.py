@@ -283,7 +283,11 @@ class Model(nn.Module):
 
     def _init_llama_model(self, configs):
         """初始化LLaMA模型"""
-        self.llama_config = LlamaConfig.from_pretrained('huggyllama/llama-7b')
+        self.llama_config = LlamaConfig.from_pretrained(
+            'huggyllama/llama-7b',
+            trust_remote_code=True,
+            local_files_only=True
+        )
         self.llama_config.num_hidden_layers = configs.llm_layers
         self.llama_config.output_attentions = True
         self.llama_config.output_hidden_states = True

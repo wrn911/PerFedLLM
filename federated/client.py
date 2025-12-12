@@ -10,13 +10,56 @@ import logging
 from typing import Dict, List
 from torch.utils.data import DataLoader
 import gc
+import os
+import json
+
+
+# --- 从 test_evaluation.py 中添加的辅助函数 ---
+def calculate_sample_metrics(pred: np.ndarray, true: np.ndarray) -> Dict[str, float]:
+    """计算单个样本的指标"""
+    mse = float(np.mean((pred - true) ** 2))
+    mae = float(np.mean(np.abs(pred - true)))
+    rmse = float(np.sqrt(mse))
+
+    return {
+        'mse': mse,
+        'mae': mae,
+        'rmse': rmse
+    }
+
+
+def denormalize_data(data: np.ndarray, norm_params: Dict) -> np.ndarray:
+    """反标准化数据"""
+    if norm_params and 'std' in norm_params and 'mean' in norm_params and norm_params['std'] != 0:
+        return data * norm_params['std'] + norm_params['mean']
+    return data
+
+
+def convert_numpy_types(obj):
+    """递归转换NumPy类型为Python原生类型"""
+    if isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif hasattr(obj, 'item'):
+        return obj.item()
+    else:
+        return obj
+
+# --- 辅助函数结束 ---
 
 
 class FederatedClient:
     """联邦学习客户端"""
 
     def __init__(self, client_id: str, shared_model: nn.Module, data_loader: DataLoader,
-                 args, logger: logging.Logger, device: torch.device):
+                 args, logger: logging.Logger, device: torch.device, norm_params: Dict = None):
         self.client_id = client_id
         self.shared_model = shared_model  # 共享模型引用
         self.data_loader = data_loader
@@ -25,6 +68,8 @@ class FederatedClient:
         self.device = device
         self.test_loader = None
         self.criterion = nn.MSELoss()
+        # 为反标准化和保存详细信息添加的参数
+        self.norm_params = norm_params
 
         # 获取可训练参数名称
         self.trainable_param_names = self._get_trainable_param_names()
@@ -333,10 +378,23 @@ class FederatedClient:
             torch.cuda.empty_cache()
 
     def _evaluate_on_test_set(self, test_loader) -> Dict[str, float]:
-        """在测试集上评估模型性能"""
+        """在测试集上评估模型性能，并根据需要保存详细数据"""
+        self.shared_model.eval()
         total_loss = 0.0
         total_mae = 0.0
         num_samples = 0
+
+        client_detailed_data = None
+        if self.args.save_detailed:
+            os.makedirs(self.args.save_detailed, exist_ok=True)
+            self.logger.info(f"将为客户端 {self.client_id} 保存详细测试数据到: {self.args.save_detailed}")
+            client_detailed_data = {
+                'client_id': self.client_id,
+                'coordinates': getattr(self, 'coordinates', None),
+                'normalization_params': self.norm_params,
+                'samples': [],
+                'client_metrics': {}
+            }
 
         with torch.no_grad():
             for batch_data in test_loader:
@@ -346,7 +404,6 @@ class FederatedClient:
                 x_mark = x_mark.to(self.device)
                 y_mark = y_mark.to(self.device)
 
-                # 使用与训练一致的前向传播逻辑
                 if hasattr(self.args, 'label_len'):
                     batch_size = x_enc.size(0)
                     x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len, x_enc.size(-1)).to(self.device)
@@ -356,15 +413,81 @@ class FederatedClient:
                 else:
                     y_pred = self.shared_model(x_enc, x_mark, None, y_mark)
 
-                mse_loss = nn.MSELoss()(y_pred, y_true)
-                mae_loss = nn.L1Loss()(y_pred, y_true)
+                mse_batch_loss = nn.MSELoss()(y_pred, y_true)
+                mae_batch_loss = nn.L1Loss()(y_pred, y_true)
 
-                total_loss += mse_loss.item() * x_enc.size(0)
-                total_mae += mae_loss.item() * x_enc.size(0)
+                total_loss += mse_batch_loss.item() * x_enc.size(0)
+                total_mae += mae_batch_loss.item() * x_enc.size(0)
                 num_samples += x_enc.size(0)
 
+                if self.args.save_detailed and client_detailed_data is not None:
+                    hist_np = x_enc.cpu().numpy()
+                    pred_np = y_pred.cpu().numpy()
+                    true_np = y_true.cpu().numpy()
+
+                    for i in range(pred_np.shape[0]):
+                        hist_sample = hist_np[i].squeeze()
+                        pred_sample = pred_np[i].squeeze()
+                        true_sample = true_np[i].squeeze()
+                        norm_metrics = calculate_sample_metrics(pred_sample, true_sample)
+
+                        sample_data = {
+                            'sample_id': len(client_detailed_data['samples']),
+                            'normalized': {
+                                'history': hist_sample.tolist(),
+                                'prediction': pred_sample.tolist(),
+                                'ground_truth': true_sample.tolist(),
+                                'metrics': norm_metrics
+                            }
+                        }
+
+                        if self.norm_params:
+                            hist_denorm = denormalize_data(hist_sample, self.norm_params)
+                            pred_denorm = denormalize_data(pred_sample, self.norm_params)
+                            true_denorm = denormalize_data(true_sample, self.norm_params)
+                            denorm_metrics = calculate_sample_metrics(pred_denorm, true_denorm)
+                            sample_data['denormalized'] = {
+                                'history': hist_denorm.tolist(),
+                                'prediction': pred_denorm.tolist(),
+                                'ground_truth': true_denorm.tolist(),
+                                'metrics': denorm_metrics
+                            }
+                        client_detailed_data['samples'].append(sample_data)
+
+        if self.args.save_detailed and client_detailed_data is not None and client_detailed_data['samples']:
+            # 计算客户端的聚合指标
+            norm_mses = [s['normalized']['metrics']['mse'] for s in client_detailed_data['samples']]
+            norm_maes = [s['normalized']['metrics']['mae'] for s in client_detailed_data['samples']]
+            client_detailed_data['client_metrics']['normalized'] = {
+                'avg_mse': float(np.mean(norm_mses)),
+                'avg_mae': float(np.mean(norm_maes)),
+                'avg_rmse': float(np.sqrt(np.mean(norm_mses))),
+            }
+
+            if self.norm_params and 'denormalized' in client_detailed_data['samples'][0]:
+                denorm_mses = [s['denormalized']['metrics']['mse'] for s in client_detailed_data['samples']]
+                denorm_maes = [s['denormalized']['metrics']['mae'] for s in client_detailed_data['samples']]
+                client_detailed_data['client_metrics']['denormalized'] = {
+                    'avg_mse': float(np.mean(denorm_mses)),
+                    'avg_mae': float(np.mean(denorm_maes)),
+                    'avg_rmse': float(np.sqrt(np.mean(denorm_mses))),
+                }
+
+            file_name = f'client_{self.client_id}.json'
+            save_path = os.path.join(self.args.save_detailed, file_name)
+            try:
+                with open(save_path, 'w', encoding='utf-8') as f:
+                    json.dump(convert_numpy_types(client_detailed_data), f, indent=2, ensure_ascii=False)
+                self.logger.info(f"客户端 {self.client_id} 详细个性化测试结果已保存到: {save_path}")
+            except Exception as e:
+                self.logger.error(f"无法保存客户端 {self.client_id} 的详细结果: {e}")
+
+        if num_samples == 0:
+            return {'mse': 0, 'mae': 0, 'rmse': 0}
+
+        final_mse = total_loss / num_samples
         return {
-            'mse': total_loss / num_samples,
+            'mse': final_mse,
             'mae': total_mae / num_samples,
-            'rmse': np.sqrt(total_loss / num_samples)
+            'rmse': np.sqrt(final_mse)
         }

@@ -50,6 +50,7 @@ class Model(nn.Module):
         self.d_llm = configs.llm_dim  # 这个值会根据选择的LLM模型动态设置
         self.patch_len = configs.patch_len
         self.stride = configs.stride
+        self.use_prompt = configs.use_prompt
 
         # 选择模型
         if configs.llm_model == 'DeepSeek':
@@ -169,7 +170,11 @@ class Model(nn.Module):
 
     def _init_deepseek_model(self, configs):
         """初始化DeepSeek模型"""
-        self.deepseek_config = AutoConfig.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
+        self.deepseek_config = AutoConfig.from_pretrained(
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+            trust_remote_code=True,
+            local_files_only=True
+        )
         self.deepseek_config.num_hidden_layers = configs.llm_layers
         self.deepseek_config.output_attentions = True
         self.deepseek_config.output_hidden_states = True
@@ -181,14 +186,9 @@ class Model(nn.Module):
                 local_files_only=True,
                 config=self.deepseek_config,
             )
-        except EnvironmentError:
-            print("Local model files not found. Attempting to download...")
-            self.llm_model = AutoModel.from_pretrained(
-                "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
-                trust_remote_code=True,
-                local_files_only=False,
-                config=self.deepseek_config,
-            )
+        except EnvironmentError as e:
+            print(f"Local model files not found:{e}")
+            raise
 
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -196,17 +196,17 @@ class Model(nn.Module):
                 trust_remote_code=True,
                 local_files_only=True
             )
-        except EnvironmentError:
-            print("Local tokenizer files not found. Attempting to download them..")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
-                trust_remote_code=True,
-                local_files_only=False
-            )
+        except EnvironmentError as e:
+            print(f"Local tokenizer files not found:{e}")
+            raise
 
     def _init_gpt2_model(self, configs):
         """初始化GPT2模型"""
-        self.gpt2_config = GPT2Config.from_pretrained('openai-community/gpt2')
+        self.gpt2_config = GPT2Config.from_pretrained(
+            'openai-community/gpt2',
+            trust_remote_code=True,
+            local_files_only=True
+        )
         self.gpt2_config.num_hidden_layers = configs.llm_layers
         self.gpt2_config.output_attentions = True
         self.gpt2_config.output_hidden_states = True
@@ -218,14 +218,8 @@ class Model(nn.Module):
                 local_files_only=True,
                 config=self.gpt2_config,
             )
-        except EnvironmentError:
-            print("Local model files not found. Attempting to download...")
-            self.llm_model = GPT2Model.from_pretrained(
-                'openai-community/gpt2',
-                trust_remote_code=True,
-                local_files_only=False,
-                config=self.gpt2_config,
-            )
+        except EnvironmentError as e:
+            print(f"Local model files not found:{e}")
 
         try:
             self.tokenizer = GPT2Tokenizer.from_pretrained(
@@ -233,13 +227,8 @@ class Model(nn.Module):
                 trust_remote_code=True,
                 local_files_only=True
             )
-        except EnvironmentError:
-            print("Local tokenizer files not found. Attempting to download them..")
-            self.tokenizer = GPT2Tokenizer.from_pretrained(
-                'openai-community/gpt2',
-                trust_remote_code=True,
-                local_files_only=False
-            )
+        except EnvironmentError as e:
+            print(f"Local tokenizer files not found:{e}")
 
     def _init_bert_model(self, configs):
         """初始化BERT模型"""
@@ -507,7 +496,11 @@ class Model(nn.Module):
         # 时序与语义对齐
         enc_out, n_vars = self.ts2language(x_enc)
 
-        llama_enc_out = torch.cat([prompt_embeddings, enc_out], dim=1)
+        #是否启用提示词
+        if(self.use_prompt):
+            llama_enc_out = torch.cat([prompt_embeddings, enc_out], dim=1)
+        else:
+            llama_enc_out = enc_out
         dec_out = self.llm_model(inputs_embeds=llama_enc_out).last_hidden_state
         dec_out = dec_out[:, :, :self.d_ff]
 

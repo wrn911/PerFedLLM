@@ -1,0 +1,583 @@
+nohup: ignoring input
+========================================
+    集中式训练脚本 - TimeLLM系列
+========================================
+========== [任务 1/6] 正在训练: timellm_milano_net_centralized ==========
+2025-12-10 22:25:13,806 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-10 22:25:13,806 - PerFedLLM - INFO - 实验配置:
+2025-12-10 22:25:13,806 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-10 22:25:13,806 - PerFedLLM - INFO -   数据集: milano.h5
+2025-12-10 22:25:13,806 - PerFedLLM - INFO -   数据类型: net
+2025-12-10 22:25:13,806 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-10 22:25:13,806 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-10 22:25:13,806 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-10 22:25:13,806 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-10 22:25:13,806 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-10 22:25:13,951 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-10 22:25:13,953 - dataset.data_loader - INFO - HDF5文件字段: ['call', 'cell', 'idx', 'lat', 'lng', 'net', 'sms']
+2025-12-10 22:25:14,026 - dataset.data_loader - INFO - 原始数据形状: (1344, 9953)
+2025-12-10 22:25:14,026 - dataset.data_loader - INFO - 时间范围: 2013-11-04 00:00:00 到 2013-12-29 23:00:00
+2025-12-10 22:25:14,029 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-10 22:25:14,029 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(113), np.int64(429), np.int64(454), np.int64(508), np.int64(540)]
+2025-12-10 22:25:14,031 - dataset.data_loader - INFO - 数据加载完成
+2025-12-10 22:25:14,032 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-10 22:25:47,064 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-10 22:25:47,064 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-10 22:25:47,064 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-10 22:25:47,065 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-10 22:25:47,272 - PerFedLLM - INFO - Data setup complete. Training samples: 49250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-10 22:25:48,146 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-10 22:25:48,146 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-10 22:29:03,979 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.462974
+2025-12-10 22:32:19,302 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.410507
+2025-12-10 22:35:34,833 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.400342
+2025-12-10 22:38:53,060 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.392747
+2025-12-10 22:42:16,530 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.385776
+2025-12-10 22:45:37,232 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.382449
+2025-12-10 22:49:00,013 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.374653
+2025-12-10 22:52:24,165 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.370873
+2025-12-10 22:55:43,698 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.368525
+2025-12-10 22:59:05,198 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.363430
+2025-12-10 23:02:23,724 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.357453
+2025-12-10 23:05:44,865 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.355373
+2025-12-10 23:09:06,686 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.351691
+2025-12-10 23:12:22,941 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.350922
+2025-12-10 23:15:38,461 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.345803
+2025-12-10 23:18:54,080 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.344830
+2025-12-10 23:22:09,427 - PerFedLLM - INFO - Epoch 17/20, Average Training Loss: 0.338608
+2025-12-10 23:25:24,873 - PerFedLLM - INFO - Epoch 18/20, Average Training Loss: 0.335384
+2025-12-10 23:28:40,863 - PerFedLLM - INFO - Epoch 19/20, Average Training Loss: 0.336906
+2025-12-10 23:31:56,554 - PerFedLLM - INFO - Epoch 20/20, Average Training Loss: 0.335049
+2025-12-10 23:32:18,292 - PerFedLLM - INFO - Evaluation results: MSE=0.297315, MAE=0.379684, RMSE=0.545266
+2025-12-10 23:32:18,292 - PerFedLLM - INFO - Centralized training process complete.
+2025-12-10 23:32:18,293 - PerFedLLM - INFO - === 步骤8: 保存结果 ===
+2025-12-10 23:32:19,264 - PerFedLLM - INFO - Results and model saved to: ./experiments/timellm_milano_net_centralized
+2025-12-10 23:32:19,264 - PerFedLLM - INFO - === 集中式训练完成 ===
+2025-12-10 23:32:19,264 - PerFedLLM - INFO - 测试指标: MSE=0.297315, MAE=0.379684
+2025-12-10 23:32:19,264 - PerFedLLM - INFO - 
+所有结果已保存到: ./experiments/timellm_milano_net_centralized
+2025-12-10 23:32:19,264 - PerFedLLM - INFO - 训练模式: centralized
+✓ timellm_milano_net_centralized 训练成功
+
+========== [任务 2/6] 正在训练: timellm_milano_call_centralized ==========
+2025-12-10 23:32:26,109 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-10 23:32:26,109 - PerFedLLM - INFO - 实验配置:
+2025-12-10 23:32:26,109 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-10 23:32:26,109 - PerFedLLM - INFO -   数据集: milano.h5
+2025-12-10 23:32:26,109 - PerFedLLM - INFO -   数据类型: call
+2025-12-10 23:32:26,109 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-10 23:32:26,109 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-10 23:32:26,109 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-10 23:32:26,109 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-10 23:32:26,109 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-10 23:32:26,272 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-10 23:32:26,273 - dataset.data_loader - INFO - HDF5文件字段: ['call', 'cell', 'idx', 'lat', 'lng', 'net', 'sms']
+2025-12-10 23:32:26,343 - dataset.data_loader - INFO - 原始数据形状: (1344, 9953)
+2025-12-10 23:32:26,344 - dataset.data_loader - INFO - 时间范围: 2013-11-04 00:00:00 到 2013-12-29 23:00:00
+2025-12-10 23:32:26,347 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-10 23:32:26,347 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(113), np.int64(429), np.int64(454), np.int64(508), np.int64(540)]
+2025-12-10 23:32:26,349 - dataset.data_loader - INFO - 数据加载完成
+2025-12-10 23:32:26,349 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-10 23:33:01,474 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-10 23:33:01,475 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-10 23:33:01,475 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-10 23:33:01,475 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-10 23:33:01,674 - PerFedLLM - INFO - Data setup complete. Training samples: 49250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-10 23:33:02,544 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-10 23:33:02,544 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-10 23:36:18,690 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.283314
+2025-12-10 23:39:34,010 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.216051
+2025-12-10 23:42:49,540 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.210852
+2025-12-10 23:46:05,116 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.200924
+2025-12-10 23:49:21,489 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.195819
+2025-12-10 23:52:36,935 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.191766
+2025-12-10 23:55:52,015 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.190250
+2025-12-10 23:59:07,997 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.188187
+2025-12-11 00:02:23,839 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.186151
+2025-12-11 00:05:39,008 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.183929
+2025-12-11 00:08:54,925 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.184217
+2025-12-11 00:12:10,403 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.181801
+2025-12-11 00:15:25,882 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.182071
+2025-12-11 00:18:41,316 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.181331
+2025-12-11 00:21:56,796 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.179254
+2025-12-11 00:25:12,403 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.177159
+2025-12-11 00:28:28,272 - PerFedLLM - INFO - Epoch 17/20, Average Training Loss: 0.175766
+2025-12-11 00:31:43,442 - PerFedLLM - INFO - Epoch 18/20, Average Training Loss: 0.176152
+2025-12-11 00:34:58,960 - PerFedLLM - INFO - Epoch 19/20, Average Training Loss: 0.173545
+2025-12-11 00:38:14,104 - PerFedLLM - INFO - Epoch 20/20, Average Training Loss: 0.171330
+2025-12-11 00:38:35,793 - PerFedLLM - INFO - Evaluation results: MSE=0.205435, MAE=0.305363, RMSE=0.453249
+2025-12-11 00:38:35,793 - PerFedLLM - INFO - Centralized training process complete.
+2025-12-11 00:38:35,794 - PerFedLLM - INFO - === 步骤8: 保存结果 ===
+2025-12-11 00:38:36,744 - PerFedLLM - INFO - Results and model saved to: ./experiments/timellm_milano_call_centralized
+2025-12-11 00:38:36,744 - PerFedLLM - INFO - === 集中式训练完成 ===
+2025-12-11 00:38:36,745 - PerFedLLM - INFO - 测试指标: MSE=0.205435, MAE=0.305363
+2025-12-11 00:38:36,745 - PerFedLLM - INFO - 
+所有结果已保存到: ./experiments/timellm_milano_call_centralized
+2025-12-11 00:38:36,745 - PerFedLLM - INFO - 训练模式: centralized
+✓ timellm_milano_call_centralized 训练成功
+
+========== [任务 3/6] 正在训练: timellm_milano_sms_centralized ==========
+2025-12-11 00:38:43,545 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-11 00:38:43,545 - PerFedLLM - INFO - 实验配置:
+2025-12-11 00:38:43,546 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-11 00:38:43,546 - PerFedLLM - INFO -   数据集: milano.h5
+2025-12-11 00:38:43,546 - PerFedLLM - INFO -   数据类型: sms
+2025-12-11 00:38:43,546 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-11 00:38:43,546 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-11 00:38:43,546 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-11 00:38:43,546 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-11 00:38:43,546 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-11 00:38:43,696 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-11 00:38:43,697 - dataset.data_loader - INFO - HDF5文件字段: ['call', 'cell', 'idx', 'lat', 'lng', 'net', 'sms']
+2025-12-11 00:38:43,764 - dataset.data_loader - INFO - 原始数据形状: (1344, 9953)
+2025-12-11 00:38:43,765 - dataset.data_loader - INFO - 时间范围: 2013-11-04 00:00:00 到 2013-12-29 23:00:00
+2025-12-11 00:38:43,768 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-11 00:38:43,768 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(113), np.int64(429), np.int64(454), np.int64(508), np.int64(540)]
+2025-12-11 00:38:43,769 - dataset.data_loader - INFO - 数据加载完成
+2025-12-11 00:38:43,770 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-11 00:39:17,910 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-11 00:39:17,910 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-11 00:39:17,910 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-11 00:39:17,911 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-11 00:39:18,199 - PerFedLLM - INFO - Data setup complete. Training samples: 49250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-11 00:39:19,081 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-11 00:39:19,082 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-11 00:42:35,107 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.366679
+2025-12-11 00:45:50,443 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.314196
+2025-12-11 00:49:05,947 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.302792
+2025-12-11 00:52:21,536 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.298568
+2025-12-11 00:55:37,282 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.292741
+2025-12-11 00:58:52,374 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.291857
+2025-12-11 01:02:07,715 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.288752
+2025-12-11 01:05:23,493 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.283085
+2025-12-11 01:08:39,511 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.282677
+2025-12-11 01:11:55,130 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.281125
+2025-12-11 01:15:10,908 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.279861
+2025-12-11 01:18:27,460 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.278819
+2025-12-11 01:21:42,953 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.276791
+2025-12-11 01:24:58,520 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.274168
+2025-12-11 01:28:14,423 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.274573
+2025-12-11 01:31:29,960 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.274013
+2025-12-11 01:34:45,464 - PerFedLLM - INFO - Epoch 17/20, Average Training Loss: 0.271429
+2025-12-11 01:38:01,158 - PerFedLLM - INFO - Epoch 18/20, Average Training Loss: 0.267595
+2025-12-11 01:41:16,747 - PerFedLLM - INFO - Epoch 19/20, Average Training Loss: 0.266428
+2025-12-11 01:44:32,747 - PerFedLLM - INFO - Epoch 20/20, Average Training Loss: 0.264334
+2025-12-11 01:44:54,522 - PerFedLLM - INFO - Evaluation results: MSE=0.969612, MAE=0.613082, RMSE=0.984689
+2025-12-11 01:44:54,522 - PerFedLLM - INFO - Centralized training process complete.
+2025-12-11 01:44:54,523 - PerFedLLM - INFO - === 步骤8: 保存结果 ===
+2025-12-11 01:44:55,511 - PerFedLLM - INFO - Results and model saved to: ./experiments/timellm_milano_sms_centralized
+2025-12-11 01:44:55,511 - PerFedLLM - INFO - === 集中式训练完成 ===
+2025-12-11 01:44:55,511 - PerFedLLM - INFO - 测试指标: MSE=0.969612, MAE=0.613082
+2025-12-11 01:44:55,511 - PerFedLLM - INFO - 
+所有结果已保存到: ./experiments/timellm_milano_sms_centralized
+2025-12-11 01:44:55,511 - PerFedLLM - INFO - 训练模式: centralized
+✓ timellm_milano_sms_centralized 训练成功
+
+========== [任务 4/6] 正在训练: timellm_trento_net_centralized ==========
+2025-12-11 01:45:02,415 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-11 01:45:02,415 - PerFedLLM - INFO - 实验配置:
+2025-12-11 01:45:02,415 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-11 01:45:02,415 - PerFedLLM - INFO -   数据集: trento.h5
+2025-12-11 01:45:02,415 - PerFedLLM - INFO -   数据类型: net
+2025-12-11 01:45:02,415 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-11 01:45:02,415 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-11 01:45:02,415 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-11 01:45:02,415 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-11 01:45:02,415 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-11 01:45:02,965 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-11 01:45:02,966 - dataset.data_loader - INFO - HDF5文件字段: ['call', 'cell', 'idx', 'lat', 'lng', 'net', 'sms']
+2025-12-11 01:45:03,032 - dataset.data_loader - INFO - 原始数据形状: (1344, 6259)
+2025-12-11 01:45:03,033 - dataset.data_loader - INFO - 时间范围: 2013-11-04 00:00:00 到 2013-12-29 23:00:00
+2025-12-11 01:45:03,035 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-11 01:45:03,035 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(517), np.int64(1224), np.int64(1327), np.int64(1442), np.int64(1458)]
+2025-12-11 01:45:03,037 - dataset.data_loader - INFO - 数据加载完成
+2025-12-11 01:45:03,037 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-11 01:45:36,123 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-11 01:45:36,124 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-11 01:45:36,124 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-11 01:45:36,125 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-11 01:45:36,382 - PerFedLLM - INFO - Data setup complete. Training samples: 49250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-11 01:45:37,276 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-11 01:45:37,276 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-11 01:48:53,384 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.556580
+2025-12-11 01:52:08,935 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.510038
+2025-12-11 01:55:24,330 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.499925
+2025-12-11 01:58:39,816 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.491007
+2025-12-11 02:01:55,617 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.481747
+2025-12-11 02:05:11,188 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.475544
+2025-12-11 02:08:26,329 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.469787
+2025-12-11 02:11:41,726 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.471074
+2025-12-11 02:14:57,422 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.463018
+2025-12-11 02:18:12,763 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.459683
+2025-12-11 02:21:28,287 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.454014
+2025-12-11 02:24:43,926 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.449930
+2025-12-11 02:27:59,083 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.448434
+2025-12-11 02:31:14,613 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.445411
+2025-12-11 02:34:30,511 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.439213
+2025-12-11 02:37:45,853 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.438197
+2025-12-11 02:41:01,390 - PerFedLLM - INFO - Epoch 17/20, Average Training Loss: 0.438442
+2025-12-11 02:44:17,039 - PerFedLLM - INFO - Epoch 18/20, Average Training Loss: 0.437195
+2025-12-11 02:47:32,473 - PerFedLLM - INFO - Epoch 19/20, Average Training Loss: 0.429641
+2025-12-11 02:50:48,164 - PerFedLLM - INFO - Epoch 20/20, Average Training Loss: 0.425758
+2025-12-11 02:51:09,832 - PerFedLLM - INFO - Evaluation results: MSE=3.768619, MAE=1.068962, RMSE=1.941293
+2025-12-11 02:51:09,832 - PerFedLLM - INFO - Centralized training process complete.
+2025-12-11 02:51:09,833 - PerFedLLM - INFO - === 步骤8: 保存结果 ===
+2025-12-11 02:51:10,764 - PerFedLLM - INFO - Results and model saved to: ./experiments/timellm_trento_net_centralized
+2025-12-11 02:51:10,764 - PerFedLLM - INFO - === 集中式训练完成 ===
+2025-12-11 02:51:10,764 - PerFedLLM - INFO - 测试指标: MSE=3.768619, MAE=1.068962
+2025-12-11 02:51:10,764 - PerFedLLM - INFO - 
+所有结果已保存到: ./experiments/timellm_trento_net_centralized
+2025-12-11 02:51:10,764 - PerFedLLM - INFO - 训练模式: centralized
+✓ timellm_trento_net_centralized 训练成功
+
+========== [任务 5/6] 正在训练: timellm_trento_call_centralized ==========
+2025-12-11 02:51:17,647 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-11 02:51:17,647 - PerFedLLM - INFO - 实验配置:
+2025-12-11 02:51:17,647 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-11 02:51:17,647 - PerFedLLM - INFO -   数据集: trento.h5
+2025-12-11 02:51:17,647 - PerFedLLM - INFO -   数据类型: call
+2025-12-11 02:51:17,647 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-11 02:51:17,647 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-11 02:51:17,647 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-11 02:51:17,647 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-11 02:51:17,647 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-11 02:51:18,202 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-11 02:51:18,203 - dataset.data_loader - INFO - HDF5文件字段: ['call', 'cell', 'idx', 'lat', 'lng', 'net', 'sms']
+2025-12-11 02:51:18,268 - dataset.data_loader - INFO - 原始数据形状: (1344, 6259)
+2025-12-11 02:51:18,269 - dataset.data_loader - INFO - 时间范围: 2013-11-04 00:00:00 到 2013-12-29 23:00:00
+2025-12-11 02:51:18,271 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-11 02:51:18,271 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(517), np.int64(1224), np.int64(1327), np.int64(1442), np.int64(1458)]
+2025-12-11 02:51:18,273 - dataset.data_loader - INFO - 数据加载完成
+2025-12-11 02:51:18,273 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-11 02:51:51,320 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-11 02:51:51,321 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-11 02:51:51,321 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-11 02:51:51,322 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-11 02:51:51,664 - PerFedLLM - INFO - Data setup complete. Training samples: 49250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-11 02:51:52,562 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-11 02:51:52,563 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-11 02:55:09,514 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.308919
+2025-12-11 02:58:25,373 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.246521
+2025-12-11 03:01:41,486 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.240111
+2025-12-11 03:04:57,460 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.234444
+2025-12-11 03:08:13,514 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.230151
+2025-12-11 03:11:28,972 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.227913
+2025-12-11 03:14:44,595 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.224947
+2025-12-11 03:18:00,850 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.225776
+2025-12-11 03:21:17,027 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.221863
+2025-12-11 03:24:32,965 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.221783
+2025-12-11 03:27:49,011 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.219104
+2025-12-11 03:31:05,224 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.217109
+2025-12-11 03:34:21,006 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.214892
+2025-12-11 03:37:37,127 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.212995
+2025-12-11 03:40:53,277 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.214577
+2025-12-11 03:44:09,098 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.211586
+2025-12-11 03:47:24,840 - PerFedLLM - INFO - Epoch 17/20, Average Training Loss: 0.208154
+2025-12-11 03:50:40,800 - PerFedLLM - INFO - Epoch 18/20, Average Training Loss: 0.208291
+2025-12-11 03:53:56,915 - PerFedLLM - INFO - Epoch 19/20, Average Training Loss: 0.206728
+2025-12-11 03:57:12,693 - PerFedLLM - INFO - Epoch 20/20, Average Training Loss: 0.206001
+2025-12-11 03:57:34,445 - PerFedLLM - INFO - Evaluation results: MSE=2.166506, MAE=0.575422, RMSE=1.471905
+2025-12-11 03:57:34,446 - PerFedLLM - INFO - Centralized training process complete.
+2025-12-11 03:57:34,446 - PerFedLLM - INFO - === 步骤8: 保存结果 ===
+2025-12-11 03:57:35,393 - PerFedLLM - INFO - Results and model saved to: ./experiments/timellm_trento_call_centralized
+2025-12-11 03:57:35,393 - PerFedLLM - INFO - === 集中式训练完成 ===
+2025-12-11 03:57:35,393 - PerFedLLM - INFO - 测试指标: MSE=2.166506, MAE=0.575422
+2025-12-11 03:57:35,393 - PerFedLLM - INFO - 
+所有结果已保存到: ./experiments/timellm_trento_call_centralized
+2025-12-11 03:57:35,393 - PerFedLLM - INFO - 训练模式: centralized
+✓ timellm_trento_call_centralized 训练成功
+
+========== [任务 6/6] 正在训练: timellm_trento_sms_centralized ==========
+2025-12-11 03:57:42,374 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-11 03:57:42,374 - PerFedLLM - INFO - 实验配置:
+2025-12-11 03:57:42,374 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-11 03:57:42,374 - PerFedLLM - INFO -   数据集: trento.h5
+2025-12-11 03:57:42,374 - PerFedLLM - INFO -   数据类型: sms
+2025-12-11 03:57:42,374 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-11 03:57:42,374 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-11 03:57:42,374 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-11 03:57:42,374 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-11 03:57:42,374 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-11 03:57:42,918 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-11 03:57:42,919 - dataset.data_loader - INFO - HDF5文件字段: ['call', 'cell', 'idx', 'lat', 'lng', 'net', 'sms']
+2025-12-11 03:57:42,985 - dataset.data_loader - INFO - 原始数据形状: (1344, 6259)
+2025-12-11 03:57:42,986 - dataset.data_loader - INFO - 时间范围: 2013-11-04 00:00:00 到 2013-12-29 23:00:00
+2025-12-11 03:57:42,988 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-11 03:57:42,988 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(517), np.int64(1224), np.int64(1327), np.int64(1442), np.int64(1458)]
+2025-12-11 03:57:42,990 - dataset.data_loader - INFO - 数据加载完成
+2025-12-11 03:57:42,991 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-11 03:58:17,063 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-11 03:58:17,063 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-11 03:58:17,064 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-11 03:58:17,064 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-11 03:58:17,215 - PerFedLLM - INFO - Data setup complete. Training samples: 49250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-11 03:58:18,083 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-11 03:58:18,083 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-11 04:01:34,141 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.395912
+2025-12-11 04:04:49,441 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.363193
+2025-12-11 04:08:04,948 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.357930
+2025-12-11 04:11:20,527 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.352445
+2025-12-11 04:14:36,549 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.349206
+2025-12-11 04:17:52,025 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.346378
+2025-12-11 04:21:07,290 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.345017
+2025-12-11 04:24:22,897 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.342650
+2025-12-11 04:27:38,095 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.341309
+2025-12-11 04:30:53,698 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.336659
+2025-12-11 04:34:09,398 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.334413
+2025-12-11 04:37:24,860 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.333180
+2025-12-11 04:40:40,660 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.329471
+2025-12-11 04:43:56,123 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.326304
+2025-12-11 04:47:11,717 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.324615
+2025-12-11 04:50:27,618 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.322765
+2025-12-11 04:53:43,477 - PerFedLLM - INFO - Epoch 17/20, Average Training Loss: 0.321069
+2025-12-11 04:56:59,123 - PerFedLLM - INFO - Epoch 18/20, Average Training Loss: 0.319184
+2025-12-11 05:00:14,692 - PerFedLLM - INFO - Epoch 19/20, Average Training Loss: 0.319569
+2025-12-11 05:03:30,704 - PerFedLLM - INFO - Epoch 20/20, Average Training Loss: 0.316535
+2025-12-11 05:03:52,427 - PerFedLLM - INFO - Evaluation results: MSE=5.147858, MAE=1.146729, RMSE=2.268889
+2025-12-11 05:03:52,427 - PerFedLLM - INFO - Centralized training process complete.
+2025-12-11 05:03:52,428 - PerFedLLM - INFO - === 步骤8: 保存结果 ===
+2025-12-11 05:03:53,360 - PerFedLLM - INFO - Results and model saved to: ./experiments/timellm_trento_sms_centralized
+2025-12-11 05:03:53,360 - PerFedLLM - INFO - === 集中式训练完成 ===
+2025-12-11 05:03:53,360 - PerFedLLM - INFO - 测试指标: MSE=5.147858, MAE=1.146729
+2025-12-11 05:03:53,360 - PerFedLLM - INFO - 
+所有结果已保存到: ./experiments/timellm_trento_sms_centralized
+2025-12-11 05:03:53,361 - PerFedLLM - INFO - 训练模式: centralized
+✓ timellm_trento_sms_centralized 训练成功
+
+========== [任务 7/6] 正在训练: timellm_zte4gup_sub_traffic_centralized ==========
+2025-12-11 05:04:00,252 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-11 05:04:00,252 - PerFedLLM - INFO - 实验配置:
+2025-12-11 05:04:00,252 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-11 05:04:00,252 - PerFedLLM - INFO -   数据集: zte4gup_sub.h5
+2025-12-11 05:04:00,252 - PerFedLLM - INFO -   数据类型: traffic
+2025-12-11 05:04:00,252 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-11 05:04:00,252 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-11 05:04:00,252 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-11 05:04:00,252 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-11 05:04:00,252 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-11 05:04:00,843 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-11 05:04:00,845 - dataset.data_loader - INFO - HDF5文件字段: ['cell', 'cell_names', 'idx', 'lat', 'lng', 'traffic']
+2025-12-11 05:04:00,852 - dataset.data_loader - INFO - 原始数据形状: (2784, 100)
+2025-12-11 05:04:00,852 - dataset.data_loader - INFO - 时间范围: 2024-07-28 00:00:00 到 2024-08-25 23:45:00
+2025-12-11 05:04:00,854 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-11 05:04:00,854 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(1), np.int64(5), np.int64(6), np.int64(7), np.int64(8)]
+2025-12-11 05:04:00,857 - dataset.data_loader - INFO - 数据加载完成
+2025-12-11 05:04:00,857 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-11 05:05:11,366 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-11 05:05:11,367 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-11 05:05:11,367 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-11 05:05:11,368 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-11 05:05:11,608 - PerFedLLM - INFO - Data setup complete. Training samples: 121250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-11 05:05:12,489 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-11 05:05:12,490 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-11 05:13:14,224 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.730138
+2025-12-11 05:21:15,780 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.710902
+2025-12-11 05:29:17,379 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.704939
+2025-12-11 05:37:19,112 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.705098
+2025-12-11 05:45:20,666 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.699870
+2025-12-11 05:53:22,298 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.699078
+2025-12-11 06:01:23,500 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.695173
+2025-12-11 06:09:24,661 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.690269
+2025-12-11 06:17:26,137 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.689152
+2025-12-11 06:25:27,336 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.687050
+2025-12-11 06:33:29,104 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.682774
+2025-12-11 06:41:30,941 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.685902
+2025-12-11 06:49:32,891 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.679651
+2025-12-11 06:57:34,175 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.681315
+2025-12-11 07:05:35,868 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.678078
+2025-12-11 07:13:37,498 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.675132
+2025-12-11 07:21:38,510 - PerFedLLM - INFO - Epoch 17/20, Average Training Loss: 0.672439
+2025-12-11 07:29:40,049 - PerFedLLM - INFO - Epoch 18/20, Average Training Loss: 0.670077
+2025-12-11 07:37:41,112 - PerFedLLM - INFO - Epoch 19/20, Average Training Loss: 0.664343
+2025-12-11 07:45:42,696 - PerFedLLM - INFO - Epoch 20/20, Average Training Loss: 0.662323
+2025-12-11 07:46:04,376 - PerFedLLM - INFO - Evaluation results: MSE=0.931709, MAE=0.491209, RMSE=0.965251
+2025-12-11 07:46:04,376 - PerFedLLM - INFO - Centralized training process complete.
+2025-12-11 07:46:04,377 - PerFedLLM - INFO - === 步骤8: 保存结果 ===
+2025-12-11 07:46:04,947 - PerFedLLM - INFO - Results and model saved to: ./experiments/timellm_zte4gup_sub_traffic_centralized
+2025-12-11 07:46:04,947 - PerFedLLM - INFO - === 集中式训练完成 ===
+2025-12-11 07:46:04,948 - PerFedLLM - INFO - 测试指标: MSE=0.931709, MAE=0.491209
+2025-12-11 07:46:04,948 - PerFedLLM - INFO - 
+所有结果已保存到: ./experiments/timellm_zte4gup_sub_traffic_centralized
+2025-12-11 07:46:04,948 - PerFedLLM - INFO - 训练模式: centralized
+✓ timellm_zte4gup_sub_traffic_centralized 训练成功
+
+========== [任务 8/6] 正在训练: timellm_zte4gdown_sub_traffic_centralized ==========
+2025-12-11 07:46:11,876 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-11 07:46:11,876 - PerFedLLM - INFO - 实验配置:
+2025-12-11 07:46:11,876 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-11 07:46:11,876 - PerFedLLM - INFO -   数据集: zte4gdown_sub.h5
+2025-12-11 07:46:11,876 - PerFedLLM - INFO -   数据类型: traffic
+2025-12-11 07:46:11,876 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-11 07:46:11,876 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-11 07:46:11,876 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-11 07:46:11,876 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-11 07:46:11,876 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-11 07:46:12,442 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-11 07:46:12,444 - dataset.data_loader - INFO - HDF5文件字段: ['cell', 'cell_names', 'idx', 'lat', 'lng', 'traffic']
+2025-12-11 07:46:12,451 - dataset.data_loader - INFO - 原始数据形状: (2784, 100)
+2025-12-11 07:46:12,452 - dataset.data_loader - INFO - 时间范围: 2024-07-28 00:00:00 到 2024-08-25 23:45:00
+2025-12-11 07:46:12,454 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-11 07:46:12,454 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(1), np.int64(5), np.int64(6), np.int64(7), np.int64(8)]
+2025-12-11 07:46:12,456 - dataset.data_loader - INFO - 数据加载完成
+2025-12-11 07:46:12,456 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-11 07:47:26,437 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-11 07:47:26,437 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-11 07:47:26,437 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-11 07:47:26,438 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-11 07:47:26,805 - PerFedLLM - INFO - Data setup complete. Training samples: 121250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-11 07:47:27,681 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-11 07:47:27,681 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-11 07:55:28,993 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.623917
+2025-12-11 08:03:30,098 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.604359
+2025-12-11 08:11:31,419 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.592147
+2025-12-11 08:19:32,813 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.587162
+2025-12-11 08:27:34,181 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.581922
+2025-12-11 08:35:35,998 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.576912
+2025-12-11 08:43:38,522 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.572938
+2025-12-11 08:51:41,344 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.568272
+2025-12-11 08:59:43,988 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.564638
+2025-12-11 09:07:46,353 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.558854
+2025-12-11 09:15:48,493 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.552762
+2025-12-11 09:23:51,338 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.549345
+2025-12-11 09:31:54,275 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.550334
+2025-12-11 09:39:55,769 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.543231
+2025-12-11 09:47:59,252 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.537314
+2025-12-11 09:56:01,820 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.532082
+2025-12-11 10:04:04,315 - PerFedLLM - INFO - Epoch 17/20, Average Training Loss: 0.528659
+2025-12-11 10:12:06,252 - PerFedLLM - INFO - Epoch 18/20, Average Training Loss: 0.519442
+2025-12-11 10:20:08,501 - PerFedLLM - INFO - Epoch 19/20, Average Training Loss: 0.515408
+2025-12-11 10:28:10,772 - PerFedLLM - INFO - Epoch 20/20, Average Training Loss: 0.507390
+2025-12-11 10:28:32,570 - PerFedLLM - INFO - Evaluation results: MSE=1.228636, MAE=0.599510, RMSE=1.108439
+2025-12-11 10:28:32,570 - PerFedLLM - INFO - Centralized training process complete.
+2025-12-11 10:28:32,571 - PerFedLLM - INFO - === 步骤8: 保存结果 ===
+2025-12-11 10:28:33,138 - PerFedLLM - INFO - Results and model saved to: ./experiments/timellm_zte4gdown_sub_traffic_centralized
+2025-12-11 10:28:33,138 - PerFedLLM - INFO - === 集中式训练完成 ===
+2025-12-11 10:28:33,138 - PerFedLLM - INFO - 测试指标: MSE=1.228636, MAE=0.599510
+2025-12-11 10:28:33,138 - PerFedLLM - INFO - 
+所有结果已保存到: ./experiments/timellm_zte4gdown_sub_traffic_centralized
+2025-12-11 10:28:33,138 - PerFedLLM - INFO - 训练模式: centralized
+✓ timellm_zte4gdown_sub_traffic_centralized 训练成功
+
+========== [任务 9/6] 正在训练: timellm_zte5gup_sub_traffic_centralized ==========
+2025-12-11 10:28:40,077 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-11 10:28:40,077 - PerFedLLM - INFO - 实验配置:
+2025-12-11 10:28:40,077 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-11 10:28:40,077 - PerFedLLM - INFO -   数据集: zte5gup_sub.h5
+2025-12-11 10:28:40,077 - PerFedLLM - INFO -   数据类型: traffic
+2025-12-11 10:28:40,077 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-11 10:28:40,077 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-11 10:28:40,077 - PerFedLLM - INFO -   设备: cuda:1
+2025-12-11 10:28:40,077 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-11 10:28:40,077 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-11 10:28:40,214 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-11 10:28:40,215 - dataset.data_loader - INFO - HDF5文件字段: ['cell', 'cell_names', 'idx', 'lat', 'lng', 'traffic']
+2025-12-11 10:28:40,220 - dataset.data_loader - INFO - 原始数据形状: (2784, 100)
+2025-12-11 10:28:40,221 - dataset.data_loader - INFO - 时间范围: 2024-07-28 00:00:00 到 2024-08-25 23:45:00
+2025-12-11 10:28:40,223 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-11 10:28:40,223 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(1), np.int64(5), np.int64(6), np.int64(7), np.int64(8)]
+2025-12-11 10:28:40,225 - dataset.data_loader - INFO - 数据加载完成
+2025-12-11 10:28:40,225 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-11 10:29:55,038 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-11 10:29:55,038 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-11 10:29:55,038 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-11 10:29:55,039 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-11 10:29:55,482 - PerFedLLM - INFO - Data setup complete. Training samples: 121250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['dense', 'key', 'position_embeddings', 'query', 'token_type_embeddings', 'value', 'word_embeddings']
+自动检测到目标模块: ['query', 'key', 'value', 'dense']
+目标模块: ['query', 'key', 'value', 'dense']
+LoRA配置完成:
+  可训练参数: 1,351,680
+  总参数: 68,306,688
+  可训练参数比例: 1.98%
+2025-12-11 10:29:56,391 - PerFedLLM - INFO - Model setup complete. Total parameters: 103,763,088
+2025-12-11 10:29:56,391 - PerFedLLM - INFO - Starting centralized training process...
+2025-12-11 10:38:00,218 - PerFedLLM - INFO - Epoch 1/20, Average Training Loss: 0.710215
+2025-12-11 10:46:02,864 - PerFedLLM - INFO - Epoch 2/20, Average Training Loss: 0.688570
+2025-12-11 10:54:06,148 - PerFedLLM - INFO - Epoch 3/20, Average Training Loss: 0.683492
+2025-12-11 11:02:09,312 - PerFedLLM - INFO - Epoch 4/20, Average Training Loss: 0.678690
+2025-12-11 11:10:12,102 - PerFedLLM - INFO - Epoch 5/20, Average Training Loss: 0.677244
+2025-12-11 11:18:13,922 - PerFedLLM - INFO - Epoch 6/20, Average Training Loss: 0.672965
+2025-12-11 11:26:16,165 - PerFedLLM - INFO - Epoch 7/20, Average Training Loss: 0.668468
+2025-12-11 11:34:19,218 - PerFedLLM - INFO - Epoch 8/20, Average Training Loss: 0.667250
+2025-12-11 11:42:22,756 - PerFedLLM - INFO - Epoch 9/20, Average Training Loss: 0.662319
+2025-12-11 11:50:25,510 - PerFedLLM - INFO - Epoch 10/20, Average Training Loss: 0.661101
+2025-12-11 11:58:29,123 - PerFedLLM - INFO - Epoch 11/20, Average Training Loss: 0.659037
+2025-12-11 12:06:31,338 - PerFedLLM - INFO - Epoch 12/20, Average Training Loss: 0.655039
+2025-12-11 12:14:34,240 - PerFedLLM - INFO - Epoch 13/20, Average Training Loss: 0.652645
+2025-12-11 12:22:36,733 - PerFedLLM - INFO - Epoch 14/20, Average Training Loss: 0.649670
+2025-12-11 12:30:39,813 - PerFedLLM - INFO - Epoch 15/20, Average Training Loss: 0.663964
+2025-12-11 12:38:42,860 - PerFedLLM - INFO - Epoch 16/20, Average Training Loss: 0.651416

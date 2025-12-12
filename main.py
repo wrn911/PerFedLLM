@@ -6,6 +6,8 @@ import argparse
 import logging
 import os
 import sys
+
+from centralized_trainer import CentralizedTrainer
 from dataset.data_loader import get_federated_data
 from models.TimeLLM import Model as TimeLLMModel
 from models.TimeMixer import Model as TimeMixerModel
@@ -125,6 +127,9 @@ def parse_args():
                        help='任务名称')
     parser.add_argument('--n_heads', type=int, default=8,
                         help='注意力头数')
+    parser.add_argument('--use_prompt', action='store_true', help='启用提示词')
+    parser.add_argument('--no_prompt', dest='use_prompt', action='store_false', help='禁用提示词')
+    parser.set_defaults(use_prompt=True)
 
     # =============== 经典模型特定参数 ===============
     # ARIMA参数
@@ -176,11 +181,11 @@ def parse_args():
                        help='TFT分位数数量')
 
     # =============== LoRA配置 ===============
-    parser.add_argument('--use_lora', action='store_true', default=True,
+    parser.add_argument('--use_lora', action='store_true', default=False,
                        help='是否使用LoRA')
-    parser.add_argument('--lora_rank', type=int, default=8,
+    parser.add_argument('--lora_rank', type=int, default=16,
                        help='LoRA rank')
-    parser.add_argument('--lora_alpha', type=int, default=16,
+    parser.add_argument('--lora_alpha', type=int, default=32,
                        help='LoRA alpha')
     parser.add_argument('--lora_dropout', type=float, default=0.1,
                        help='LoRA dropout')
@@ -209,8 +214,8 @@ def parse_args():
 
     # =============== 训练模式配置 ===============
     parser.add_argument('--training_mode', type=str, default='auto',
-                       choices=['auto', 'federated', 'distributed'],
-                       help='训练模式: auto(自动选择), federated(联邦学习), distributed(分布式)')
+                       choices=['auto', 'federated', 'distributed', 'centralized'],
+                       help='训练模式: auto(自动选择), federated(联邦学习), distributed(分布式), centralized(集中式)')
 
     # =============== 其他配置 ===============
     parser.add_argument('--seed', type=int, default=42,
@@ -228,6 +233,8 @@ def parse_args():
                        help='日志级别')
     parser.add_argument('--device', type=str, default='cuda:0',
                         help='设备 (cpu/cuda/auto)')
+    parser.add_argument('--save_detailed', type=str, default=None,
+                        help='为每一个客户端保存预测值真实值')
 
     # =============== 联邦算法配置 ===============
     parser.add_argument('--fed_algorithm', type=str, default='perfedavg',
@@ -376,33 +383,28 @@ def main():
         if training_mode == 'distributed':
             logger.info("=== 步骤3: 创建分布式训练器 ===")
             trainer = ClassicalModelTrainer(args, logger)
-
-            # 4. 设置数据和模型
             trainer.setup_data(federated_data, data_loader_factory)
             trainer.setup_model(model_class, args)
-
-            # 5. 开始分布式训练
             logger.info("=== 步骤4: 开始分布式训练 ===")
             results = trainer.train_distributed()
+
+        elif training_mode == 'centralized':
+            logger.info("=== 步骤3: 创建集中式训练器 ===")
+            trainer = CentralizedTrainer(args, logger)
+            trainer.setup_data(federated_data, data_loader_factory)
+            trainer.setup_model(model_class, args)
+            results = trainer.train()
 
         else:  # federated mode
             logger.info("=== 步骤3: 创建联邦学习训练器 ===")
             trainer = PerFedLLMTrainerOptimized(args, logger)
-
-            # 4. 设置数据
             logger.info("=== 步骤4: 设置数据 ===")
             trainer.setup_data(federated_data, data_loader_factory)
-
-            # 5. 设置模型
             logger.info("=== 步骤5: 设置模型 ===")
             trainer.setup_model(model_class, args)
-
-            # 6. 设置客户端和服务器
             logger.info("=== 步骤6: 设置客户端和服务器 ===")
             trainer.setup_clients()
             trainer.setup_server()
-
-            # 7. 开始训练
             logger.info("=== 步骤7: 开始联邦训练 ===")
             results = trainer.train()
 
@@ -426,12 +428,51 @@ def main():
             else:
                 logger.warning("没有客户端成功完成训练")
 
+        elif training_mode == 'centralized':
+            trainer.save_results(results, save_dir)
+            logger.info("=== 集中式训练完成 ===")
+            logger.info(f"测试指标: MSE={results['test_metrics']['mse']:.6f}, MAE={results['test_metrics']['mae']:.6f}")
+
         else:
             # 联邦学习结果保存
             # 保存全局模型
             if hasattr(trainer, 'global_model'):
                 torch.save(trainer.global_model.state_dict(),
                           os.path.join(save_dir, 'global_model.pth'))
+
+                # 保存训练曲线数据为CSV格式
+                training_history = results.get('training_history', {})
+                if training_history.get('round_metrics'):
+                    import pandas as pd
+
+                    # 准备CSV数据
+                    csv_data = []
+                    round_metrics = training_history['round_metrics']
+                    round_losses = training_history.get('round_losses', [])
+
+                    for i, metrics in enumerate(round_metrics):
+                        row = {
+                            'round': i + 1,
+                            'avg_mse': metrics.get('avg_mse', None),
+                            'avg_mae': metrics.get('avg_mae', None),
+                            'avg_rmse': metrics.get('avg_rmse', None),
+                            'std_mse': metrics.get('std_mse', None),
+                            'std_mae': metrics.get('std_mae', None),
+                            'std_rmse': metrics.get('std_rmse', None),
+                        }
+
+                        # 如果有对应的训练损失数据，也加入
+                        if i < len(round_losses):
+                            row['training_loss'] = round_losses[i]
+
+                        csv_data.append(row)
+
+                    # 保存CSV文件
+                    if csv_data:
+                        df = pd.DataFrame(csv_data)
+                        csv_path = os.path.join(save_dir, 'training_curves.csv')
+                        df.to_csv(csv_path, index=False)
+                        logger.info(f"训练曲线数据已保存到: {csv_path}")
 
             # 保存训练结果
             def convert_tensors(obj):

@@ -1,3 +1,5 @@
+# PerFedLLM/classical_trainer.py
+
 """
 经典模型分布式训练器 - 专门用于训练传统时间序列预测模型
 支持ARIMA, Lasso, SVR, Prophet, LSTM, TFT等模型的分布式训练
@@ -17,6 +19,49 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 import warnings
 warnings.filterwarnings('ignore')
 
+# --- 辅助函数 ---
+def calculate_sample_metrics(pred: np.ndarray, true: np.ndarray) -> Dict[str, float]:
+    """计算单个样本的指标"""
+    mse = float(np.mean((pred - true) ** 2))
+    mae = float(np.mean(np.abs(pred - true)))
+    rmse = float(np.sqrt(mse))
+    return {'mse': mse, 'mae': mae, 'rmse': rmse}
+
+def denormalize_data(data: np.ndarray, norm_params: Dict) -> np.ndarray:
+    """反标准化数据"""
+    if norm_params and 'std' in norm_params and 'mean' in norm_params and norm_params['std'] != 0:
+        return data * norm_params['std'] + norm_params['mean']
+    return data
+
+def convert_numpy_types(obj):
+    """递归转换NumPy类型为Python原生类型"""
+    if isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif hasattr(obj, 'item'):
+        return obj.item()
+    else:
+        return obj
+
+def get_normalization_params(federated_data: Dict, client_id: str):
+    """获取客户端的标准化参数"""
+    norm_params = federated_data['metadata'].get('norm_params', None)
+    if norm_params and 'mean' in norm_params and 'std' in norm_params:
+        # 尝试不同的键类型匹配
+        for key_type in [int(client_id), str(client_id), client_id]:
+            if key_type in norm_params['mean'] and key_type in norm_params['std']:
+                mean = float(norm_params['mean'][key_type])
+                std = float(norm_params['std'][key_type])
+                return {'mean': mean, 'std': std}
+    return None
+# --- 辅助函数结束 ---
 
 class ClassicalModelTrainer:
     """经典模型分布式训练器"""
@@ -75,7 +120,7 @@ class ClassicalModelTrainer:
         else:
             self.logger.info(f"传统机器学习模型设置完成: {model_class.__name__}")
 
-    def train_neural_model_client(self, client_id: str, client_data: Dict) -> Dict[str, float]:
+    def train_neural_model_client(self, client_id: str, client_data: Dict, norm_params: Dict) -> Dict[str, float]:
         """训练单个客户端的神经网络模型"""
         self.logger.info(f"开始训练客户端 {client_id} (神经网络模式)")
 
@@ -148,7 +193,7 @@ class ClassicalModelTrainer:
             num_batches += epoch_batches
 
         # 测试评估
-        test_metrics = self._evaluate_neural_model(test_loader)
+        test_metrics = self._evaluate_neural_model(test_loader, client_id, norm_params)
 
         avg_train_loss = total_loss / max(num_batches, 1)
         self.logger.info(f"客户端 {client_id} 训练完成")
@@ -293,29 +338,37 @@ class ClassicalModelTrainer:
 
         return metrics
 
-    def _evaluate_neural_model(self, test_loader) -> Dict[str, float]:
-        """评估神经网络模型"""
+    def _evaluate_neural_model(self, test_loader, client_id: str, norm_params: Dict) -> Dict[str, float]:
+        """评估神经网络模型，并根据需要保存详细数据"""
         self.model.eval()
-        total_loss = 0.0
-        total_mae = 0.0
-        num_samples = 0
+        total_loss, total_mae, num_samples = 0.0, 0.0, 0
+
+        # >>> 新增代码: 初始化详细数据保存结构 <<<
+        client_detailed_data = None
+        if self.args.save_detailed:
+            os.makedirs(self.args.save_detailed, exist_ok=True)
+            self.logger.info(f"将为客户端 {client_id} 保存详细测试数据到: {self.args.save_detailed}")
+            client_detailed_data = {
+                'client_id': client_id,
+                'coordinates': self.federated_data['clients'][int(client_id)]['coordinates'],
+                'normalization_params': norm_params,
+                'samples': [],
+                'client_metrics': {}
+            }
 
         with torch.no_grad():
             for batch_data in test_loader:
                 x_enc, y_true, x_mark, y_mark = batch_data
-                x_enc = x_enc.to(self.device)
-                y_true = y_true.to(self.device)
-                x_mark = x_mark.to(self.device)
-                y_mark = y_mark.to(self.device)
+                x_enc, y_true, x_mark, y_mark = x_enc.to(self.device), y_true.to(self.device), x_mark.to(
+                    self.device), y_mark.to(self.device)
 
                 # 前向传播
                 if hasattr(self.args, 'label_len') and self.args.label_len > 0:
                     batch_size = x_enc.size(0)
-                    x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len,
-                                      x_enc.size(-1)).to(self.device)
+                    x_dec = torch.zeros(batch_size, self.args.label_len + self.args.pred_len, x_enc.size(-1)).to(
+                        self.device)
                     x_dec[:, :self.args.label_len, :] = x_enc[:, -self.args.label_len:, :]
                     x_mark_dec = torch.cat([x_mark[:, -self.args.label_len:, :], y_mark], dim=1)
-
                     y_pred = self.model(x_enc, x_mark, x_dec, x_mark_dec)
                 else:
                     y_pred = self.model(x_enc, x_mark, None, y_mark)
@@ -328,11 +381,64 @@ class ClassicalModelTrainer:
                 total_mae += mae_loss.item() * x_enc.size(0)
                 num_samples += x_enc.size(0)
 
-        return {
-            'mse': total_loss / num_samples,
-            'mae': total_mae / num_samples,
-            'rmse': np.sqrt(total_loss / num_samples)
-        }
+                # >>> 新增代码: 保存每个样本的详细信息 <<<
+                if self.args.save_detailed and client_detailed_data is not None:
+                    hist_np, pred_np, true_np = x_enc.cpu().numpy(), y_pred.cpu().numpy(), y_true.cpu().numpy()
+
+                    for i in range(pred_np.shape[0]):
+                        hist_sample, pred_sample, true_sample = hist_np[i].squeeze(), pred_np[i].squeeze(), true_np[
+                            i].squeeze()
+                        norm_metrics = calculate_sample_metrics(pred_sample, true_sample)
+
+                        sample_data = {
+                            'sample_id': len(client_detailed_data['samples']),
+                            'normalized': {
+                                'history': hist_sample.tolist(),
+                                'prediction': pred_sample.tolist(),
+                                'ground_truth': true_sample.tolist(),
+                                'metrics': norm_metrics
+                            }
+                        }
+
+                        if norm_params:
+                            hist_denorm = denormalize_data(hist_sample, norm_params)
+                            pred_denorm = denormalize_data(pred_sample, norm_params)
+                            true_denorm = denormalize_data(true_sample, norm_params)
+                            denorm_metrics = calculate_sample_metrics(pred_denorm, true_denorm)
+                            sample_data['denormalized'] = {
+                                'history': hist_denorm.tolist(),
+                                'prediction': pred_denorm.tolist(),
+                                'ground_truth': true_denorm.tolist(),
+                                'metrics': denorm_metrics
+                            }
+                        client_detailed_data['samples'].append(sample_data)
+
+        # >>> 新增代码: 保存客户端的详细JSON文件 <<<
+        if self.args.save_detailed and client_detailed_data is not None and client_detailed_data['samples']:
+            norm_mses = [s['normalized']['metrics']['mse'] for s in client_detailed_data['samples']]
+            norm_maes = [s['normalized']['metrics']['mae'] for s in client_detailed_data['samples']]
+            client_detailed_data['client_metrics']['normalized'] = {
+                'avg_mse': float(np.mean(norm_mses)), 'avg_mae': float(np.mean(norm_maes)),
+                'avg_rmse': float(np.sqrt(np.mean(norm_mses))),
+            }
+            if norm_params and 'denormalized' in client_detailed_data['samples'][0]:
+                denorm_mses = [s['denormalized']['metrics']['mse'] for s in client_detailed_data['samples']]
+                denorm_maes = [s['denormalized']['metrics']['mae'] for s in client_detailed_data['samples']]
+                client_detailed_data['client_metrics']['denormalized'] = {
+                    'avg_mse': float(np.mean(denorm_mses)), 'avg_mae': float(np.mean(denorm_maes)),
+                    'avg_rmse': float(np.sqrt(np.mean(denorm_mses))),
+                }
+
+            save_path = os.path.join(self.args.save_detailed, f'client_{client_id}.json')
+            try:
+                with open(save_path, 'w', encoding='utf-8') as f:
+                    json.dump(convert_numpy_types(client_detailed_data), f, indent=2, ensure_ascii=False)
+                self.logger.info(f"客户端 {client_id} 详细测试结果已保存到: {save_path}")
+            except Exception as e:
+                self.logger.error(f"无法保存客户端 {client_id} 的详细结果: {e}")
+
+        final_mse = total_loss / max(num_samples, 1)
+        return {'mse': final_mse, 'mae': total_mae / max(num_samples, 1), 'rmse': np.sqrt(final_mse)}
 
     def train_distributed(self) -> Dict:
         """执行分布式训练"""
@@ -350,7 +456,16 @@ class ClassicalModelTrainer:
                 if self.is_neural_model:
                     # 重置模型参数（每个客户端独立训练）
                     self._reset_model_parameters()
-                    client_metrics = self.train_neural_model_client(client_id, client_data)
+                    norm_params=get_normalization_params(self.federated_data, str(client_id))
+                    client_metrics = self.train_neural_model_client(client_id, client_data, norm_params)
+
+                    # >>> 新增代码: 保存每个客户端的神经网络模型 <<<
+                    models_save_dir = os.path.join(self.args.save_dir, self.args.experiment_name, 'client_models')
+                    os.makedirs(models_save_dir, exist_ok=True)
+                    model_save_path = os.path.join(models_save_dir, f'client_{client_id}_model.pth')
+                    torch.save(self.model.state_dict(), model_save_path)
+                    self.logger.info(f"客户端 {client_id} 的模型已保存至: {model_save_path}")
+
                 else:
                     client_metrics = self.train_traditional_model_client(client_id, client_data)
 

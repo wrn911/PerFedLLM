@@ -1,0 +1,39 @@
+nohup: ignoring input
+========================================
+    集中式训练脚本 - TimeLLM系列
+========================================
+========== [任务 1/6] 正在训练: timellm_milano_net_centralized_GPT2 ==========
+2025-12-11 12:40:44,393 - PerFedLLM - INFO - === PerFedLLM & 经典模型训练开始 ===
+2025-12-11 12:40:44,394 - PerFedLLM - INFO - 实验配置:
+2025-12-11 12:40:44,394 - PerFedLLM - INFO -   模型类型: timellm
+2025-12-11 12:40:44,394 - PerFedLLM - INFO -   数据集: milano.h5
+2025-12-11 12:40:44,394 - PerFedLLM - INFO -   数据类型: net
+2025-12-11 12:40:44,394 - PerFedLLM - INFO -   客户端数量: 50
+2025-12-11 12:40:44,394 - PerFedLLM - INFO -   序列长度: seq_len=96, label_len=48, pred_len=24
+2025-12-11 12:40:44,394 - PerFedLLM - INFO -   设备: cuda:3
+2025-12-11 12:40:44,394 - PerFedLLM - INFO -   训练模式: centralized
+2025-12-11 12:40:44,394 - PerFedLLM - INFO - === 步骤1: 加载数据 ===
+2025-12-11 12:40:44,533 - dataset.data_loader - INFO - 开始加载数据...
+2025-12-11 12:40:44,534 - dataset.data_loader - INFO - HDF5文件字段: ['call', 'cell', 'idx', 'lat', 'lng', 'net', 'sms']
+2025-12-11 12:40:44,602 - dataset.data_loader - INFO - 原始数据形状: (1344, 9953)
+2025-12-11 12:40:44,603 - dataset.data_loader - INFO - 时间范围: 2013-11-04 00:00:00 到 2013-12-29 23:00:00
+2025-12-11 12:40:44,606 - dataset.data_loader - INFO - 选中基站数量: 50
+2025-12-11 12:40:44,606 - dataset.data_loader - INFO - 选中基站ID前5个: [np.int64(113), np.int64(429), np.int64(454), np.int64(508), np.int64(540)]
+2025-12-11 12:40:44,608 - dataset.data_loader - INFO - 数据加载完成
+2025-12-11 12:40:44,608 - dataset.data_loader - INFO - 准备联邦学习数据...
+2025-12-11 12:41:27,083 - dataset.data_loader - INFO - 联邦数据准备完成
+2025-12-11 12:41:27,084 - PerFedLLM - INFO - === 步骤2: 设置模型 ===
+2025-12-11 12:41:27,084 - PerFedLLM - INFO - === 步骤3: 创建集中式训练器 ===
+2025-12-11 12:41:27,085 - PerFedLLM - INFO - Setting up centralized data...
+2025-12-11 12:41:27,268 - PerFedLLM - INFO - Data setup complete. Training samples: 49250, Test samples: 8400
+LLM隐藏维度: 768
+正在应用LoRA配置...
+检测到的线性层模块: ['c_attn', 'c_fc', 'c_proj', 'wpe', 'wte']
+自动检测到目标模块: ['c_attn', 'c_proj']
+目标模块: ['c_attn', 'c_proj']
+LoRA配置完成:
+  可训练参数: 811,008
+  总参数: 82,723,584
+  可训练参数比例: 0.98%
+2025-12-11 12:41:28,340 - PerFedLLM - INFO - Model setup complete. Total parameters: 137,914,984
+2025-12-11 12:41:28,340 - PerFedLLM - INFO - Starting centralized training process...

@@ -14,6 +14,18 @@ from federated.client import FederatedClient
 from federated.server import FederatedServer
 from utils.communication_stats import print_communication_comparison
 
+def get_normalization_params(federated_data: Dict, client_id: str):
+    """获取客户端的标准化参数"""
+    norm_params = federated_data['metadata'].get('norm_params', None)
+    if norm_params and 'mean' in norm_params and 'std' in norm_params:
+        # 尝试不同的键类型匹配
+        for key_type in [int(client_id), str(client_id), client_id]:
+            if key_type in norm_params['mean'] and key_type in norm_params['std']:
+                mean = float(norm_params['mean'][key_type])
+                std = float(norm_params['std'][key_type])
+                return {'mean': mean, 'std': std}
+    return None
+
 
 class PerFedLLMTrainerOptimized:
     """PerFedLLM训练器主类 - 简洁优化版"""
@@ -85,7 +97,8 @@ class PerFedLLMTrainerOptimized:
                 data_loader=train_loader,
                 args=self.args,
                 logger=self.logger,
-                device=self.device
+                device=self.device,
+                norm_params=get_normalization_params(self.federated_data, str(client_id))
             )
             client.coordinates = client_data['coordinates']
 

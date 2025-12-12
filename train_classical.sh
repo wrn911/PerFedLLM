@@ -5,7 +5,7 @@
 
 # ================== 配置参数 ==================
 # 模型列表 - 可以根据需要修改
-MODELS=("arima" "lasso" "svr" "lstm" "tft")
+MODELS=("arima" "lasso" "svr" "lstm" "tft" "autoformer" "dLinear" "informer")
 
 # 数据集和数据类型 - 可以根据需要修改
 DATASETS=("milano" "trento")
@@ -15,7 +15,8 @@ DATA_TYPES=("net" "call" "sms")
 SEQ_LEN=96
 PRED_LEN=24
 EPOCHS=20
-GPU_DEVICE="cuda:3"  # 可以修改为 cuda:1, cuda:2 等
+NUM_CLIENTS=50
+GPU_DEVICE="cuda:2"  # 可以修改为 cuda:1, cuda:2 等
 
 # ================== 主要函数 ==================
 
@@ -35,7 +36,7 @@ train_model() {
         "arima"|"lasso"|"svr"|"prophet")
             extra_params="--epochs 1"  # 传统模型不需要多轮训练
             ;;
-        "lstm"|"tft")
+        "lstm"|"tft"|"autoformer"|"dLinear"|"informer")
             extra_params="--epochs $EPOCHS"  # 神经网络模型需要多轮训练
             ;;
     esac
@@ -50,6 +51,7 @@ train_model() {
         --pred_len $PRED_LEN \
         --training_mode distributed \
         --device $GPU_DEVICE \
+        --num_clients $NUM_CLIENTS\
         $extra_params
 
     if [ $? -eq 0 ]; then
